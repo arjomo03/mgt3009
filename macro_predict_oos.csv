@@ -1,0 +1,3 @@
+model,N_train,N_oos,R2_OOS,RMSE_model,RMSE_mean
+F1 contemporaneous (Model A),63,63,-2.524047626783779,.10311855,.054930795
+F1 with lags 0–3 (Model B),60,63,-13.29608116647479,.20769422,.054930795

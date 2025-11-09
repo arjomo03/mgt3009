@@ -1,0 +1,13 @@
+metric,value
+Sharpe (ann excess),1.050149
+Tracking error (ann),.10136161
+Info ratio (ann),.82135046
+Sortino (ann),1.7638372
+Treynor (ann),.19076049
+M2 (ann),.048954982
+Omega (0),161.46062
+Up Capture,1.2623402
+Down Capture,.89810354
+Hit Ratio,.609375
+Calmar,.76189846
+Max drawdown,-.31018773

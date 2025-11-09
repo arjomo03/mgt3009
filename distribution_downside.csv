@@ -1,0 +1,10 @@
+metric,value
+N (months),127
+Mean (simple),.0192587134367469
+SD (simple),.053799713026455
+Skewness,-.1865805588778682
+Excess kurtosis,-.1820374390467228
+Jarque–Bera chi2,.9122137427276578
+JB p-value,.6337461041687844
+VaR 5% (hist),-.0721510327417672
+CVaR 5% (hist),-.0900567699868995

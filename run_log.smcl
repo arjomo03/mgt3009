@@ -1,0 +1,3235 @@
+{smcl}
+{com}{sf}{ul off}{txt}{.-}
+      name:  {res}<unnamed>
+       {txt}log:  {res}/Users/johnmohmedi/Desktop/MGT3009/output/run_log.smcl
+  {txt}log type:  {res}smcl
+ {txt}opened on:  {res} 9 Nov 2025, 19:16:10
+{txt}
+{com}. 
+. * 1) Data build
+. do "`root'/01_monthly_prices_returns_mac.do"
+{txt}
+{com}. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * Paths
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. local f_month "`root'/GOOGL_MSFT_MA_HD_MONTHLY.xlsx"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/data"
+{txt}
+{com}. 
+. * BL weights
+. scalar Wg = 0.366003594
+{txt}
+{com}. scalar Wm = 0.390981129
+{txt}
+{com}. scalar Wa = 0.101758435
+{txt}
+{com}. scalar Wh = 0.141256842
+{txt}
+{com}. 
+. * --- Import monthly PostInvestment sheet (2015–2025) ---
+. import excel using "`f_month'", sheet("PostInvestment") firstrow clear
+{res}{text}(12 vars, 131 obs)
+
+{com}. 
+. * --- Monthly date m (simple & robust to string vs numeric) ---
+. capture confirm string variable date
+{txt}
+{com}. if !_rc {c -(}
+.     gen double m = monthly(date,"YM")
+.     replace m = mofd(daily(date,"YMD")) if missing(m)
+.     replace m = mofd(daily(date,"DMY")) if missing(m)
+. {c )-}
+{txt}
+{com}. else {c -(}
+.     * date is numeric: try Stata daily first; if implausible, assume Excel serial
+.     gen double m = mofd(date)
+{txt}(1 missing value generated)
+{com}.     replace m = mofd(date + td(30dec1899)) if m < tm(1990m1) | m > tm(2035m12)
+{txt}(0 real changes made)
+{com}. {c )-}
+{txt}
+{com}. format m %tm
+{txt}
+{com}. drop if missing(m)
+{txt}(1 observation deleted)
+
+{com}. sort m
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m10}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * --- Map the five price columns (raw headers) ---
+. rename GOOGL goog_adj
+{res}{txt}
+{com}. rename MSFT  msft_adj
+{res}{txt}
+{com}. rename MA    ma_adj
+{res}{txt}
+{com}. rename HD    hd_adj
+{res}{txt}
+{com}. rename SPXT  spxt_tr
+{res}{txt}
+{com}. 
+. * Make sure numeric
+. foreach v in goog_adj msft_adj ma_adj hd_adj spxt_tr {c -(}
+{txt}  2{com}.     cap destring `v', replace ignore(",")
+{txt}  3{com}. {c )-}
+{txt}
+{com}. 
+. * --- Monthly log returns ---
+. gen double r_goog_m = ln(goog_adj/L.goog_adj)
+{txt}(1 missing value generated)
+
+{com}. gen double r_msft_m = ln(msft_adj/L.msft_adj)
+{txt}(1 missing value generated)
+
+{com}. gen double r_ma_m   = ln(ma_adj/L.ma_adj)
+{txt}(1 missing value generated)
+
+{com}. gen double r_hd_m   = ln(hd_adj/L.hd_adj)
+{txt}(1 missing value generated)
+
+{com}. gen double r_mkt_m  = ln(spxt_tr/L.spxt_tr)
+{txt}(1 missing value generated)
+
+{com}. 
+. * --- Portfolios (RB, EW) ---
+. gen double r_p_rb_m = Wg*r_goog_m + Wm*r_msft_m + Wa*r_ma_m + Wh*r_hd_m
+{txt}(1 missing value generated)
+
+{com}. gen double r_p_ew_m = 0.25*(r_goog_m + r_msft_m + r_ma_m + r_hd_m)
+{txt}(1 missing value generated)
+
+{com}. 
+. * --- Buy-and-hold (BH) via value path ---
+. gen double v_g  = Wg*exp(sum(cond(missing(r_goog_m),0,r_goog_m)))
+{txt}
+{com}. gen double v_mx = Wm*exp(sum(cond(missing(r_msft_m),0,r_msft_m)))
+{txt}
+{com}. gen double v_a  = Wa*exp(sum(cond(missing(r_ma_m),  0,r_ma_m  )))
+{txt}
+{com}. gen double v_h  = Wh*exp(sum(cond(missing(r_hd_m),  0,r_hd_m  )))
+{txt}
+{com}. gen double v_bh = v_g + v_mx + v_a + v_h
+{txt}
+{com}. gen double r_p_bh_m = ln(v_bh/L.v_bh)
+{txt}(1 missing value generated)
+
+{com}. 
+. * Keep assignment window (you said PostInvestment covers 2015–2025)
+. keep if inrange(m, tm(2015m1), tm(2025m9))
+{txt}(1 observation deleted)
+
+{com}. 
+. save "`root'/output/data/monthly_returns.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/monthly_returns.dta{rm}
+saved
+{p_end}
+
+{com}. export delimited using "`root'/output/data/monthly_returns.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/data/monthly_returns.csv} saved
+
+{com}. di as result "Saved -> `root'/output/data/monthly_returns.dta"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/data/monthly_returns.dta
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. do "`root'/02_macro_merge_MAC.do"
+{txt}
+{com}. ****************************************************
+. * 02_macro_merge_MAC.do  (Stata 18)
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. local f_macro "`root'/Macroeconomic_Data.xlsx"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/data"
+{txt}
+{com}. 
+. * Import macro sheet
+. import excel using "`f_macro'", sheet("FREDPostInvestment") firstrow clear
+{res}{text}(16 vars, 130 obs)
+
+{com}. 
+. * Monthly date m (robust)
+. capture confirm string variable date
+{txt}
+{com}. if !_rc {c -(}
+.     gen double m = monthly(date,"YM")
+.     replace m = mofd(daily(date,"YMD")) if missing(m)
+.     replace m = mofd(daily(date,"DMY")) if missing(m)
+. {c )-}
+{txt}
+{com}. else {c -(}
+.     gen double m = mofd(date)
+{txt}(1 missing value generated)
+{com}.     replace m = mofd(date + td(30dec1899)) if m < tm(1990m1) | m > tm(2035m12)
+{txt}(0 real changes made)
+{com}. {c )-}
+{txt}
+{com}. format m %tm
+{txt}
+{com}. drop if missing(m)
+{txt}(1 observation deleted)
+
+{com}. sort m
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * Canonical names
+. capture rename CPIAUCSL cpi
+{txt}
+{com}. capture rename UNRATE  unrate
+{txt}
+{com}. capture rename FEDFUNDS fedfunds
+{txt}
+{com}. capture rename UMCSENT umcsent
+{txt}
+{com}. 
+. * EPU -> epu
+. capture confirm variable EPUTRADE
+{txt}
+{com}. if !_rc {c -(}
+.     gen double epu = EPUTRADE
+. {c )-}
+{txt}
+{com}. else {c -(}
+.     capture confirm variable EPU
+.     if !_rc {c -(}
+.         gen double epu = EPU
+.     {c )-}
+.     else {c -(}
+.         di as error "!! No EPU column found (expected EPUTRADE or EPU)."
+.         exit 111
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. foreach v in cpi unrate fedfunds umcsent epu {c -(}
+{txt}  2{com}.     cap destring `v', replace ignore(",")
+{txt}  3{com}. {c )-}
+{txt}
+{com}. 
+. * Transforms
+. gen double ln_cpi  = ln(cpi)
+{txt}
+{com}. gen double infl    = D.ln_cpi
+{txt}(1 missing value generated)
+
+{com}. 
+. gen double d_unrate = D.unrate
+{txt}(2 missing values generated)
+
+{com}. gen double d_fed    = D.fedfunds
+{txt}(1 missing value generated)
+
+{com}. 
+. gen double ln_umcsent = cond(umcsent>0, ln(umcsent), .)
+{txt}
+{com}. gen double d_sent     = D.ln_umcsent
+{txt}(1 missing value generated)
+
+{com}. label var d_sent "Δ ln(UMich sentiment)"
+{txt}
+{com}. 
+. gen double ln_epu   = cond(epu>0, ln(epu), .)
+{txt}
+{com}. gen double d_logepu = D.ln_epu
+{txt}(1 missing value generated)
+
+{com}. label var d_logepu "Δ ln(EPU)"
+{txt}
+{com}. 
+. * COVID era dummy for macro regs (distinct from NBER recession shading)
+. gen byte covid_era = inrange(m, tm(2020m3), tm(2021m12))
+{txt}
+{com}. label var covid_era "COVID era (2020m3–2021m12)"
+{txt}
+{com}. 
+. * Keep window
+. keep if inrange(m, tm(2015m1), tm(2025m9))
+{txt}(0 observations deleted)
+
+{com}. 
+. save "`root'/output/data/macro_monthly.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/macro_monthly.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. * Merge with returns
+. use "`root'/output/data/monthly_returns.dta", clear
+{txt}
+{com}. merge 1:1 m using "`root'/output/data/macro_monthly.dta", keep(match) nogenerate
+{res}
+{txt}{col 5}Result{col 33}Number of obs
+{col 5}{hline 41}
+{col 5}Not matched{col 30}{res}               0
+{txt}{col 5}Matched{col 30}{res}             129{txt}  
+{col 5}{hline 41}
+
+{com}. 
+. save "`root'/output/data/returns_macro.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/returns_macro.dta{rm}
+saved
+{p_end}
+
+{com}. export delimited using "`root'/output/data/returns_macro.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/data/returns_macro.csv} saved
+
+{com}. di as result "Saved -> `root'/output/data/returns_macro.dta"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/data/returns_macro.dta
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. do "`root'/03_factors_merge_mac.do"
+{txt}
+{com}. ****************************************************
+. * 03_factors_merge_mac.do  (Stata 18)
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. local f_macro "`root'/Macroeconomic_Data.xlsx"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/data"
+{txt}
+{com}. 
+. local M_START = tm(2015m1)
+{txt}
+{com}. local M_END   = tm(2025m9)
+{txt}
+{com}. 
+. * === Fama–French 5 (monthly) ===
+. import excel using "`f_macro'", sheet("FamaFrenchFiveFactor") firstrow clear
+{res}{text}(7 vars, 233 obs)
+
+{com}. gen double m = .
+{txt}(233 missing values generated)
+
+{com}. capture confirm numeric variable Date
+{txt}
+{com}. if !_rc {c -(}
+.     cap destring Date, replace ignore(",") force
+.     gen int yy = floor(Date/100)
+.     gen int mm = mod(Date,100)
+.     replace m = ym(yy,mm)
+. {c )-}
+{txt}
+{com}. capture confirm string variable date
+{txt}
+{com}. if !_rc {c -(}
+.     replace m = monthly(date,"YM") if missing(m)
+.     replace m = ym(real(substr(date,1,4)), real(substr(date,6,2))) if missing(m) & length(date)>=7
+.     replace m = ym(real(substr(date,1,4)), real(substr(date,5,2))) if missing(m) & length(date)==6
+. {c )-}
+{txt}
+{com}. capture confirm numeric variable date
+{txt}
+{com}. if !_rc {c -(}
+.     replace m = mofd(date) if missing(m)
+{txt}(233 real changes made)
+{com}.     replace m = mofd(date + td(30dec1899)) if missing(m)
+{txt}(0 real changes made)
+{com}.     replace m = ym(floor(date/100), mod(date,100)) if missing(m) & inrange(date,190001,210012)
+{txt}(0 real changes made)
+{com}. {c )-}
+{txt}
+{com}. format m %tm
+{txt}
+{com}. drop if missing(m)
+{txt}(0 observations deleted)
+
+{com}. sort m
+{txt}
+{com}. 
+. capture rename Mkt-RF Mkt_RF
+{txt}
+{com}. capture rename MktRF  Mkt_RF
+{txt}
+{com}. capture rename Mkt_RF mkt_rf
+{txt}
+{com}. capture rename SMB    smb
+{txt}
+{com}. capture rename HML    hml
+{txt}
+{com}. capture rename RMW    rmw
+{txt}
+{com}. capture rename CMA    cma
+{txt}
+{com}. capture rename RF     rf
+{txt}
+{com}. 
+. capture confirm variable mkt_rf
+{txt}
+{com}. if _rc {c -(}
+.     foreach v of varlist _all {c -(}
+{txt}  2{com}.         capture confirm string variable `v'
+{txt}  3{com}.         if !_rc cap destring `v', replace ignore(",")
+{txt}  4{com}.     {c )-}
+.     ds, has(type numeric)
+.     local nums `r(varlist)'
+.     local keep
+.     foreach v of local nums {c -(}
+{txt}  2{com}.         if inlist("`v'","m","Date","date","yy","mm") continue
+{txt}  3{com}.         local keep `keep' `v'
+{txt}  4{com}.     {c )-}
+.     local n : word count `keep'
+.     if `n'<6 {c -(}
+.         di as error "FF5: expected 6 numeric factor columns after Date; found `n'."
+.         exit 111
+.     {c )-}
+.     rename `: word 1 of `keep'' mkt_rf
+.     rename `: word 2 of `keep'' smb
+.     rename `: word 3 of `keep'' hml
+.     rename `: word 4 of `keep'' rmw
+.     rename `: word 5 of `keep'' cma
+.     rename `: word 6 of `keep'' rf
+. {c )-}
+{txt}
+{com}. 
+. foreach v in mkt_rf smb hml rmw cma rf {c -(}
+{txt}  2{com}.     cap destring `v', replace ignore(",")
+{txt}  3{com}.     replace `v' = `v'/100
+{txt}  4{com}. {c )-}
+{txt}(233 real changes made)
+(233 real changes made)
+(232 real changes made)
+(232 real changes made)
+(232 real changes made)
+(161 real changes made)
+
+{com}. keep m mkt_rf smb hml rmw cma rf
+{txt}
+{com}. duplicates tag m, gen(dup)
+
+{p 0 4}{txt}Duplicates in terms of {res} m{p_end}
+{txt}
+{com}. count if dup
+  {res}0
+{txt}
+{com}. if r(N)>0 collapse (mean) mkt_rf smb hml rmw cma rf, by(m)
+{txt}
+{com}. isid m
+{txt}
+{com}. keep if inrange(m, `M_START', `M_END')
+{txt}(105 observations deleted)
+
+{com}. save "`root'/output/data/ff5_monthly.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/ff5_monthly.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. * === Momentum (UMD) ===
+. clear
+{txt}
+{com}. import excel using "`f_macro'", sheet("FamaFrenchMomentum") firstrow clear
+{res}{text}(4 vars, 233 obs)
+
+{com}. gen double m = .
+{txt}(233 missing values generated)
+
+{com}. capture confirm numeric variable Date
+{txt}
+{com}. if !_rc {c -(}
+.     cap destring Date, replace ignore(",") force
+.     gen int yy = floor(Date/100)
+.     gen int mm = mod(Date,100)
+.     replace m = ym(yy,mm)
+. {c )-}
+{txt}
+{com}. capture confirm string variable date
+{txt}
+{com}. if !_rc {c -(}
+.     replace m = monthly(date,"YM") if missing(m)
+.     replace m = ym(real(substr(date,1,4)), real(substr(date,6,2))) if missing(m) & length(date)>=7
+.     replace m = ym(real(substr(date,1,4)), real(substr(date,5,2))) if missing(m) & length(date)==6
+. {c )-}
+{txt}
+{com}. capture confirm numeric variable date
+{txt}
+{com}. if !_rc {c -(}
+.     replace m = mofd(date) if missing(m)
+{txt}(233 real changes made)
+{com}.     replace m = mofd(date + td(30dec1899)) if missing(m)
+{txt}(0 real changes made)
+{com}.     replace m = ym(floor(date/100), mod(date,100)) if missing(m) & inrange(date,190001,210012)
+{txt}(0 real changes made)
+{com}. {c )-}
+{txt}
+{com}. format m %tm
+{txt}
+{com}. drop if missing(m)
+{txt}(0 observations deleted)
+
+{com}. sort m
+{txt}
+{com}. capture rename UMD umd
+{txt}
+{com}. capture rename Mom umd
+{txt}
+{com}. cap destring umd, replace ignore(",")
+{txt}
+{com}. replace umd = umd/100
+{txt}(233 real changes made)
+
+{com}. keep m umd
+{txt}
+{com}. duplicates tag m, gen(dup)
+
+{p 0 4}{txt}Duplicates in terms of {res} m{p_end}
+{txt}
+{com}. count if dup
+  {res}0
+{txt}
+{com}. if r(N)>0 collapse (mean) umd, by(m)
+{txt}
+{com}. isid m
+{txt}
+{com}. keep if inrange(m, `M_START', `M_END')
+{txt}(105 observations deleted)
+
+{com}. save "`root'/output/data/mom_monthly.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/mom_monthly.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. * === Merge with returns & build excess returns ===
+. use "`root'/output/data/returns_macro.dta", clear
+{txt}
+{com}. merge 1:1 m using "`root'/output/data/ff5_monthly.dta",  keep(match) nogenerate
+{res}
+{txt}{col 5}Result{col 33}Number of obs
+{col 5}{hline 41}
+{col 5}Not matched{col 30}{res}               0
+{txt}{col 5}Matched{col 30}{res}             128{txt}  
+{col 5}{hline 41}
+
+{com}. merge 1:1 m using "`root'/output/data/mom_monthly.dta", keep(match) nogenerate
+{res}
+{txt}{col 5}Result{col 33}Number of obs
+{col 5}{hline 41}
+{col 5}Not matched{col 30}{res}               0
+{txt}{col 5}Matched{col 30}{res}             128{txt}  
+{col 5}{hline 41}
+
+{com}. 
+. * 1) Log rf for log excess
+. gen double rf_log = ln(1 + rf)
+{txt}
+{com}. gen double rp_rb_ex = r_p_rb_m - rf_log
+{txt}(1 missing value generated)
+
+{com}. gen double r_mkt_ex = r_mkt_m  - rf_log
+{txt}(1 missing value generated)
+
+{com}. gen double rp_bh_ex = r_p_bh_m - rf_log
+{txt}(1 missing value generated)
+
+{com}. 
+. * 2) Simple returns & excess (for FF)
+. gen double rp_rb_s = exp(r_p_rb_m)  - 1
+{txt}(1 missing value generated)
+
+{com}. gen double r_mkt_s = exp(r_mkt_m)   - 1
+{txt}(1 missing value generated)
+
+{com}. gen double rp_bh_s = exp(r_p_bh_m)  - 1
+{txt}(1 missing value generated)
+
+{com}. gen double rp_rb_ex_s = rp_rb_s - rf
+{txt}(1 missing value generated)
+
+{com}. gen double r_mkt_ex_s = r_mkt_s - rf
+{txt}(1 missing value generated)
+
+{com}. gen double rp_bh_ex_s = rp_bh_s - rf
+{txt}(1 missing value generated)
+
+{com}. 
+. label var rp_rb_ex    "Excess return (RB, log)"
+{txt}
+{com}. label var r_mkt_ex    "MKT-RF (log)"
+{txt}
+{com}. label var rp_bh_ex    "Excess return (BH, log)"
+{txt}
+{com}. label var rp_rb_ex_s  "Excess return (RB, simple)"
+{txt}
+{com}. label var r_mkt_ex_s  "MKT-RF (simple)"
+{txt}
+{com}. label var rp_bh_ex_s  "Excess return (BH, simple)"
+{txt}
+{com}. 
+. save "`root'/output/data/master_monthly.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/master_monthly.dta{rm}
+saved
+{p_end}
+
+{com}. export delimited using "`root'/output/data/master_monthly.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/data/master_monthly.csv} saved
+
+{com}. di as result "Saved -> `root'/output/data/master_monthly.dta"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/data/master_monthly.dta
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. 
+. * 2) Core analysis (already in repo)
+. do "`root'/04_performance_factor_regs_mac.do"
+{txt}
+{com}. ****************************************************
+. * 04_performance_factor_regs_mac.do  (Stata 18)
+. * Portfolio metrics, factor regressions, rolling CAPM,
+. * attribution, and sub-period diagnostics.
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * ---------- Paths ----------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/data"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * ---------- Load master ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly                      // m is %tm
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * ---------- Guards for standalone runs ----------
+. * If someone runs 04 alone, ensure simple-return series exist
+. capture confirm variable rp_rb_s
+{txt}
+{com}. if _rc gen double rp_rb_s = exp(r_p_rb_m) - 1
+{txt}
+{com}. 
+. capture confirm variable r_mkt_s
+{txt}
+{com}. if _rc gen double r_mkt_s = exp(r_mkt_m) - 1
+{txt}
+{com}. 
+. * Window + recession band (NBER recession used for shading)
+. local W_START = tm(2015m1)
+{txt}
+{com}. quietly su m, meanonly
+{txt}
+{com}. local W_END   = r(max)
+{txt}
+{com}. local REC_START = tm(2020m2)
+{txt}
+{com}. local REC_END   = tm(2020m4)
+{txt}
+{com}. 
+. * Yearly tick labels at 45°
+. local yfirst = yofd(dofm(`W_START'))
+{txt}
+{com}. local ylast  = yofd(dofm(`W_END'))
+{txt}
+{com}. local XLABS
+{txt}
+{com}. forvalues Y = `yfirst'/`ylast' {c -(}
+{txt}  2{com}.     local XLABS `XLABS' `=ym(`Y',1)' "01/01/`Y'"
+{txt}  3{com}. {c )-}
+{txt}
+{com}. 
+. ****************************************************
+. * 1) Performance metrics (+M², Treynor, Calmar, Omega, Up/Down, Hit)
+. ****************************************************
+. * Portfolio log-excess stats (Sharpe/IR/TE)
+. quietly su rp_rb_ex
+{txt}
+{com}. scalar mu_ex  = r(mean)
+{txt}
+{com}. scalar sd_ex  = r(sd)
+{txt}
+{com}. scalar sharpe_ann = (12*mu_ex)/(sqrt(12)*sd_ex)
+{txt}
+{com}. 
+. * Tracking error & Information ratio vs log market excess
+. gen double ex_diff = rp_rb_ex - r_mkt_ex
+{txt}(1 missing value generated)
+
+{com}. quietly su ex_diff
+{txt}
+{com}. scalar te_ann = sqrt(12)*r(sd)
+{txt}
+{com}. scalar ir_ann = (12*r(mean))/te_ann
+{txt}
+{com}. 
+. * Sortino (true downside deviation, monthly threshold 0)
+. gen double _negsq = cond(rp_rb_ex < 0, rp_rb_ex^2, 0)
+{txt}
+{com}. quietly su _negsq, meanonly
+{txt}
+{com}. scalar _dd_m = sqrt(r(mean))
+{txt}
+{com}. scalar sortino = .
+{txt}
+{com}. if _dd_m>0 scalar sortino = (sqrt(12)*mu_ex)/_dd_m
+{txt}
+{com}. drop _negsq
+{txt}
+{com}. 
+. * Value path & max drawdown (log)
+. gen double v_rb = exp(sum(r_p_rb_m))
+{txt}
+{com}. gen double peak = v_rb
+{txt}
+{com}. replace peak = max(peak[_n-1], v_rb) if _n>1
+{txt}(64 real changes made)
+
+{com}. gen double drawdown = (v_rb/peak) - 1
+{txt}
+{com}. quietly su drawdown
+{txt}
+{com}. scalar maxdd = r(min)
+{txt}
+{com}. 
+. * Additional standard metrics (on correct units)
+. quietly su r_mkt_ex
+{txt}
+{com}. scalar mu_mkt_ex = r(mean)
+{txt}
+{com}. scalar sd_mkt_ex = r(sd)
+{txt}
+{com}. 
+. * Treynor (annual) using OLS beta from CAPM (log)
+. quietly regress rp_rb_ex r_mkt_ex
+{txt}
+{com}. scalar beta_ols = _b[r_mkt_ex]
+{txt}
+{com}. scalar treynor_ann = .
+{txt}
+{com}. if beta_ols!=0 scalar treynor_ann = 12*mu_ex / beta_ols
+{txt}
+{com}. 
+. * M^2 (excess form): Sharpe_p*σ_mkt − μ_mkt; monthly then annual
+. scalar M2_m  = (mu_ex/sd_ex)*sd_mkt_ex - mu_mkt_ex
+{txt}
+{com}. scalar M2_ann = 12*M2_m
+{txt}
+{com}. 
+. * Annual return (geometric, log) and Calmar
+. quietly su r_p_rb_m
+{txt}
+{com}. scalar mu_port_m = r(mean)
+{txt}
+{com}. scalar ann_return = exp(12*mu_port_m) - 1
+{txt}
+{com}. scalar calmar = .
+{txt}
+{com}. if maxdd<0 scalar calmar = ann_return/abs(maxdd)
+{txt}
+{com}. 
+. * Omega(0) using SIMPLE returns (compute sums safely as mean*N)
+. capture confirm variable rp_rb_s
+{txt}
+{com}. if _rc gen double rp_rb_s = exp(r_p_rb_m) - 1
+{txt}
+{com}. gen double gain = cond(rp_rb_s>0,  rp_rb_s, 0)
+{txt}(1 missing value generated)
+
+{com}. gen double loss = cond(rp_rb_s<0, -rp_rb_s, 0)
+{txt}
+{com}. quietly su gain, meanonly
+{txt}
+{com}. scalar G = r(mean)*r(N)
+{txt}
+{com}. quietly su loss, meanonly
+{txt}
+{com}. scalar L = r(mean)*r(N)
+{txt}
+{com}. scalar omega0 = .
+{txt}
+{com}. if L>0 scalar omega0 = G/L
+{txt}
+{com}. drop gain loss
+{txt}
+{com}. 
+. * Up/Down capture & Hit ratio (simple vs market simple)
+. capture confirm variable r_mkt_s
+{txt}
+{com}. if _rc gen double r_mkt_s = exp(r_mkt_m) - 1
+{txt}
+{com}. gen byte up_mkt   = r_mkt_s > 0
+{txt}
+{com}. gen byte down_mkt = r_mkt_s <= 0
+{txt}
+{com}. quietly su rp_rb_s if up_mkt
+{txt}
+{com}. scalar cap_up_p = r(mean)
+{txt}
+{com}. quietly su r_mkt_s if up_mkt
+{txt}
+{com}. scalar cap_up_m = r(mean)
+{txt}
+{com}. quietly su rp_rb_s if down_mkt
+{txt}
+{com}. scalar cap_dn_p = r(mean)
+{txt}
+{com}. quietly su r_mkt_s if down_mkt
+{txt}
+{com}. scalar cap_dn_m = r(mean)
+{txt}
+{com}. scalar UpCapture   = .
+{txt}
+{com}. scalar DownCapture = .
+{txt}
+{com}. if cap_up_m!=0   scalar UpCapture   = cap_up_p / cap_up_m
+{txt}
+{com}. if cap_dn_m!=0   scalar DownCapture = cap_dn_p / cap_dn_m
+{txt}
+{com}. gen byte beat = (rp_rb_s > r_mkt_s)
+{txt}
+{com}. quietly su beat
+{txt}
+{com}. scalar HitRatio = r(mean)
+{txt}
+{com}. drop up_mkt down_mkt beat
+{txt}
+{com}. 
+. * Export performance metrics
+. postfile P str32 metric value using "`root'/output/tables/perf_metrics.dta", replace
+{txt}
+{com}. post P ("Sharpe (ann excess)") (sharpe_ann)
+{txt}
+{com}. post P ("Tracking error (ann)") (te_ann)
+{txt}
+{com}. post P ("Info ratio (ann)")     (ir_ann)
+{txt}
+{com}. post P ("Sortino (ann)")        (sortino)
+{txt}
+{com}. post P ("Treynor (ann)")        (treynor_ann)
+{txt}
+{com}. post P ("M2 (ann)")             (M2_ann)
+{txt}
+{com}. post P ("Omega (0)")            (omega0)
+{txt}
+{com}. post P ("Up Capture")           (UpCapture)
+{txt}
+{com}. post P ("Down Capture")         (DownCapture)
+{txt}
+{com}. post P ("Hit Ratio")            (HitRatio)
+{txt}
+{com}. post P ("Calmar")               (calmar)
+{txt}
+{com}. post P ("Max drawdown")         (maxdd)
+{txt}
+{com}. postclose P
+{txt}
+{com}. use "`root'/output/tables/perf_metrics.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/perf_metrics.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/perf_metrics.csv} saved
+
+{com}. 
+. ****************************************************
+. * 2) Factor regressions (HAC lag=6) — CAPM (log), FF5+UMD (simple)
+. ****************************************************
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * ---------- CAPM (log) vs SPXT proxy ----------
+. newey rp_rb_ex r_mkt_ex, lag(6)
+
+{txt}Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}       127
+{txt}Maximum lag = {res}6{col 49}{txt}F(  1,       125){col 67}= {res}    449.49
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 4}r_mkt_ex {c |}{col 14}{res}{space 2}  1.01534{col 26}{space 2} .0478905{col 37}{space 1}   21.20{col 46}{space 3}0.000{col 54}{space 4}  .920559{col 67}{space 3} 1.110122
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0067966{col 26}{space 2} .0026023{col 37}{space 1}    2.61{col 46}{space 3}0.010{col 54}{space 4} .0016463{col 67}{space 3} .0119469
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{com}. scalar alpha_capm    = _b[_cons]
+{txt}
+{com}. scalar alpha_se_capm = _se[_cons]
+{txt}
+{com}. test _cons = 0
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,   125) ={res}    6.82
+{txt}{col 13}Prob > F ={res}    0.0101
+{txt}
+{com}. scalar p_alpha_capm  = r(p)
+{txt}
+{com}. quietly regress rp_rb_ex r_mkt_ex if e(sample)
+{txt}
+{com}. scalar r2_capm = e(r2)
+{txt}
+{com}. scalar n_capm  = e(N)
+{txt}
+{com}. 
+. * ---------- FF5+UMD (simple) — textbook Fama–French ----------
+. newey rp_rb_ex_s mkt_rf smb hml rmw cma umd, lag(6)
+
+{txt}Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}       127
+{txt}Maximum lag = {res}6{col 49}{txt}F(  6,       120){col 67}= {res}    156.59
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}  rp_rb_ex_s{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 6}mkt_rf {c |}{col 14}{res}{space 2}   1.0124{col 26}{space 2} .0453021{col 37}{space 1}   22.35{col 46}{space 3}0.000{col 54}{space 4} .9227049{col 67}{space 3} 1.102095
+{txt}{space 9}smb {c |}{col 14}{res}{space 2}-.3995899{col 26}{space 2} .1371912{col 37}{space 1}   -2.91{col 46}{space 3}0.004{col 54}{space 4}-.6712189{col 67}{space 3}-.1279609
+{txt}{space 9}hml {c |}{col 14}{res}{space 2}-.0964275{col 26}{space 2} .0935167{col 37}{space 1}   -1.03{col 46}{space 3}0.305{col 54}{space 4}-.2815841{col 67}{space 3}  .088729
+{txt}{space 9}rmw {c |}{col 14}{res}{space 2} .1365171{col 26}{space 2}  .102759{col 37}{space 1}    1.33{col 46}{space 3}0.187{col 54}{space 4}-.0669385{col 67}{space 3} .3399728
+{txt}{space 9}cma {c |}{col 14}{res}{space 2}-.3394933{col 26}{space 2} .1093478{col 37}{space 1}   -3.10{col 46}{space 3}0.002{col 54}{space 4}-.5559943{col 67}{space 3}-.1229922
+{txt}{space 9}umd {c |}{col 14}{res}{space 2} .0038202{col 26}{space 2} .0795706{col 37}{space 1}    0.05{col 46}{space 3}0.962{col 54}{space 4} -.153724{col 67}{space 3} .1613643
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0059103{col 26}{space 2} .0023562{col 37}{space 1}    2.51{col 46}{space 3}0.013{col 54}{space 4} .0012452{col 67}{space 3} .0105753
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{com}. scalar alpha_ff6    = _b[_cons]
+{txt}
+{com}. scalar alpha_se_ff6 = _se[_cons]
+{txt}
+{com}. test _cons = 0
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,   120) ={res}    6.29
+{txt}{col 13}Prob > F ={res}    0.0135
+{txt}
+{com}. scalar p_alpha_ff6  = r(p)
+{txt}
+{com}. quietly regress rp_rb_ex_s mkt_rf smb hml rmw cma umd if e(sample)
+{txt}
+{com}. scalar r2_ff6 = e(r2)
+{txt}
+{com}. scalar n_ff6  = e(N)
+{txt}
+{com}. 
+. * ---------- Optional: CAPM (simple, FF market) ----------
+. newey rp_rb_ex_s mkt_rf, lag(6)
+
+{txt}Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}       127
+{txt}Maximum lag = {res}6{col 49}{txt}F(  1,       125){col 67}= {res}    369.35
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}  rp_rb_ex_s{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 6}mkt_rf {c |}{col 14}{res}{space 2} .9638765{col 26}{space 2} .0501539{col 37}{space 1}   19.22{col 46}{space 3}0.000{col 54}{space 4} .8646157{col 67}{space 3} 1.063137
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0079409{col 26}{space 2} .0027086{col 37}{space 1}    2.93{col 46}{space 3}0.004{col 54}{space 4} .0025803{col 67}{space 3} .0133014
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{com}. scalar alpha_capm_s    = _b[_cons]
+{txt}
+{com}. scalar alpha_se_capm_s = _se[_cons]
+{txt}
+{com}. test _cons = 0
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,   125) ={res}    8.60
+{txt}{col 13}Prob > F ={res}    0.0040
+{txt}
+{com}. scalar p_alpha_capm_s  = r(p)
+{txt}
+{com}. quietly regress rp_rb_ex_s mkt_rf if e(sample)
+{txt}
+{com}. scalar r2_capm_s = e(r2)
+{txt}
+{com}. scalar n_capm_s  = e(N)
+{txt}
+{com}. 
+. * Export factor summary (wrap each scalar in scalar() to avoid r(133))
+. tempname F
+{txt}
+{com}. postfile `F' str20 model double alpha alpha_se p_alpha r2 N using ///
+>     "`root'/output/tables/factor_regs_summary.dta", replace
+{txt}
+{com}. post `F' ("CAPM (log)")     (scalar(alpha_capm))   (scalar(alpha_se_capm))   (scalar(p_alpha_capm))   (scalar(r2_capm))   (scalar(n_capm))
+{txt}
+{com}. post `F' ("FF5+UMD (simp)") (scalar(alpha_ff6))    (scalar(alpha_se_ff6))    (scalar(p_alpha_ff6))    (scalar(r2_ff6))    (scalar(n_ff6))
+{txt}
+{com}. post `F' ("CAPM (simp)")    (scalar(alpha_capm_s)) (scalar(alpha_se_capm_s)) (scalar(p_alpha_capm_s)) (scalar(r2_capm_s)) (scalar(n_capm_s))
+{txt}
+{com}. postclose `F'
+{txt}
+{com}. use "`root'/output/tables/factor_regs_summary.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/factor_regs_summary.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/factor_regs_summary.csv} saved
+
+{com}. 
+. ****************************************************
+. * 3) Rolling 36m CAPM — both variants (log & simple)
+. ****************************************************
+. * (a) Log CAPM roll (rp_rb_ex on r_mkt_ex)
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. rolling _b, window(36) saving("`root'/output/data/rollcapm_log.dta", replace): ///
+>     regress rp_rb_ex r_mkt_ex
+{res}{txt}(running {bf:regress} on estimation sample)
+{res}
+{text}Rolling replications ({result:93}){text}: {res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}10{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}20{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}30{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}40{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}50{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}60{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}70{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}80{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}90{res}{text}.{res}{text}.{res}{text}.{text} done
+{res}{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollcapm_log.dta{rm}
+saved
+{p_end}
+
+{com}. use "`root'/output/data/rollcapm_log.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen m = end
+{txt}
+{com}. format m %tm
+{txt}
+{com}. rename _b_cons alpha
+{res}{txt}
+{com}. capture confirm variable _b_r_mkt_ex
+{txt}
+{com}. if !_rc {c -(}
+.     rename _b_r_mkt_ex beta
+{res}{com}. {c )-}
+{txt}
+{com}. else {c -(}
+.     di as error "No rolling beta column (_b_r_mkt_ex) for log roll."
+.     exit 111
+. {c )-}
+{txt}
+{com}. keep m alpha beta
+{txt}
+{com}. save "`root'/output/data/rollcapm_log_clean.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollcapm_log_clean.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. * (b) Simple CAPM roll (rp_rb_ex_s on mkt_rf)
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. rolling _b, window(36) saving("`root'/output/data/rollcapm_simp.dta", replace): ///
+>     regress rp_rb_ex_s mkt_rf
+{res}{txt}(running {bf:regress} on estimation sample)
+{res}
+{text}Rolling replications ({result:93}){text}: {res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}10{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}20{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}30{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}40{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}50{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}60{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}70{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}80{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}90{res}{text}.{res}{text}.{res}{text}.{text} done
+{res}{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollcapm_simp.dta{rm}
+saved
+{p_end}
+
+{com}. use "`root'/output/data/rollcapm_simp.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen m = end
+{txt}
+{com}. format m %tm
+{txt}
+{com}. rename _b_cons alpha
+{res}{txt}
+{com}. capture confirm variable _b_mkt_rf
+{txt}
+{com}. if !_rc {c -(}
+.     rename _b_mkt_rf beta
+{res}{com}. {c )-}
+{txt}
+{com}. else {c -(}
+.     di as error "No rolling beta column (_b_mkt_rf) for simple roll."
+.     exit 111
+. {c )-}
+{txt}
+{com}. keep m alpha beta
+{txt}
+{com}. save "`root'/output/data/rollcapm_simp_clean.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollcapm_simp_clean.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. ****************************************************
+. * 4) Figures — Growth, Rolling β (both), Drawdown, Sentiment scatter
+. ****************************************************
+. program drop _all
+{txt}
+{com}. program define _make_band
+{txt}  1{com}.     syntax varlist(min=1 max=1)
+{txt}  2{com}.     quietly su `varlist'
+{txt}  3{com}.     local lo = r(min)
+{txt}  4{com}.     local hi = r(max)
+{txt}  5{com}.     local pad = 0.03*(`hi' - `lo')
+{txt}  6{com}.     gen double y0 = `lo' - `pad'
+{txt}  7{com}.     gen double y1 = `hi' + `pad'
+{txt}  8{com}. end
+{txt}
+{com}. 
+. * 4a) Growth of $1
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. gen double v_port = exp(sum(r_p_rb_m))
+{txt}
+{com}. gen double v_spxt = exp(sum(r_mkt_m))
+{txt}
+{com}. replace v_port = v_port / v_port[1]
+{txt}(0 real changes made)
+
+{com}. replace v_spxt = v_spxt / v_spxt[1]
+{txt}(0 real changes made)
+
+{com}. gen byte rec = inrange(m, `REC_START', `REC_END')
+{txt}
+{com}. _make_band v_port
+{txt}
+{com}. twoway ///
+>  (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>  (line v_port m, lwidth(medthick)) ///
+>  (line v_spxt m, lpattern(dash) lwidth(medthick)), ///
+>  legend(order(2 "Portfolio (RB)" 3 "S&P 500 TR") pos(11) ring(0) col(1)) ///
+>  title("Growth of $1 (2015–`=yofd(dofm(`W_END'))')", color(black)) ///
+>  subtitle("Recession shaded", color(black)) ///
+>  xtitle("Month") ytitle("Cumulative value") ///
+>  xlabel(`XLABS', angle(45)) xscale(range(`W_START' `W_END')) ///
+>  graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_cum_value.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_cum_value.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_cum_value.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_cum_value.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * 4b) Rolling β — log
+. use "`root'/output/data/rollcapm_log_clean.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. quietly su beta
+{txt}
+{com}. gen double y0 = r(min)
+{txt}
+{com}. gen double y1 = r(max)
+{txt}
+{com}. twoway ///
+>   (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>   (line beta m, lwidth(medthick) lcolor(cranberry)), ///
+>   title("Rolling 36m CAPM β (log MKT-RF)") subtitle("Recession shaded") legend(off) ///
+>   xtitle("Month") ytitle("β to log market excess") ///
+>   graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_rolling_beta_log.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_beta_log.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_rolling_beta_log.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_beta_log.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * 4c) Rolling β — simple
+. use "`root'/output/data/rollcapm_simp_clean.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. quietly su beta
+{txt}
+{com}. gen double y0 = r(min)
+{txt}
+{com}. gen double y1 = r(max)
+{txt}
+{com}. twoway ///
+>   (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>   (line beta m, lwidth(medthick) lcolor(cranberry)), ///
+>   title("Rolling 36m CAPM β (FF MKT_RF)") subtitle("Recession shaded") legend(off) ///
+>   xtitle("Month") ytitle("β to FF market (simple)") ///
+>   graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_rolling_beta_simple.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_beta_simple.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_rolling_beta_simple.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_beta_simple.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * 4d) Portfolio drawdown
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. gen double v_rb2 = exp(sum(r_p_rb_m))
+{txt}
+{com}. gen double peak2 = v_rb2
+{txt}
+{com}. replace peak2 = max(peak2[_n-1], v_rb2) if _n>1
+{txt}(64 real changes made)
+
+{com}. gen double drawdown = (v_rb2/peak2) - 1
+{txt}
+{com}. gen byte rec = inrange(m, `REC_START', `REC_END')
+{txt}
+{com}. _make_band drawdown
+{txt}
+{com}. twoway ///
+>  (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>  (line drawdown m, lwidth(medthick)), ///
+>  title("Portfolio drawdown", color(black)) ///
+>  subtitle("Recession shaded", color(black)) legend(off) ///
+>  ytitle("Drawdown") xtitle("Month") ///
+>  xlabel(`XLABS', angle(45)) xscale(range(`W_START' `W_END')) ///
+>  graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_drawdown.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_drawdown.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_drawdown.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_drawdown.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * 4e) Excess vs Δln sentiment scatter + slope/p-value
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. capture drop ln_sent d_ln_sent rec
+{txt}
+{com}. gen double ln_sent  = ln(umcsent) if umcsent>0
+{txt}
+{com}. gen double d_ln_sent = D.ln_sent
+{txt}(1 missing value generated)
+
+{com}. label var d_ln_sent "Δ ln(UMich sentiment)"
+{txt}
+{com}. gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. keep if !missing(rp_rb_ex, d_ln_sent)
+{txt}(1 observation deleted)
+
+{com}. twoway ///
+>  (scatter rp_rb_ex d_ln_sent if rec,   msize(vsmall) msymbol(O) mcolor(gs8)) ///
+>  (scatter rp_rb_ex d_ln_sent if !rec,  msize(vsmall) mcolor(navy)) ///
+>  (lfit    rp_rb_ex d_ln_sent, lwidth(medthick) lcolor(forest_green)), ///
+>  title("Excess return vs Δ log sentiment") ///
+>  ytitle("Portfolio excess (monthly)") xtitle("{c -(}&Delta{c )-} ln(UMich sentiment)") ///
+>  legend(order(2 "Non-recession" 1 "Recession (grey)" 3 "OLS fit") pos(11) ring(0) col(1)) ///
+>  note("Recession months (2020m2–2020m4) are shown in grey", size(small)) ///
+>  graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_sent_scatter.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_sent_scatter.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_sent_scatter.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_sent_scatter.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. quietly reg rp_rb_ex d_ln_sent
+{txt}
+{com}. scalar slope_dln = _b[d_ln_sent]
+{txt}
+{com}. scalar p_dln     = 2*ttail(e(df_r),abs(_b[d_ln_sent]/_se[d_ln_sent]))
+{txt}
+{com}. postfile Q str20 stat value using "`root'/output/tables/sent_scatter_fit.dta", replace
+{txt}
+{com}. post Q ("slope_dlnsent") (scalar(slope_dln))
+{txt}
+{com}. post Q ("p_value")       (scalar(p_dln))
+{txt}
+{com}. postclose Q
+{txt}
+{com}. use "`root'/output/tables/sent_scatter_fit.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/sent_scatter_fit.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/sent_scatter_fit.csv} saved
+
+{com}. 
+. ****************************************************
+. * 5) Attribution by stock: return & risk contribution (simple)
+. ****************************************************
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. 
+. * Individual simple returns from log series (clean re-runs)
+. capture drop r_goog_s r_msft_s r_ma_s r_hd_s
+{txt}
+{com}. gen r_goog_s = exp(r_goog_m) - 1
+{txt}(1 missing value generated)
+
+{com}. gen r_msft_s = exp(r_msft_m) - 1
+{txt}(1 missing value generated)
+
+{com}. gen r_ma_s   = exp(r_ma_m)   - 1
+{txt}(1 missing value generated)
+
+{com}. gen r_hd_s   = exp(r_hd_m)   - 1
+{txt}(1 missing value generated)
+
+{com}. 
+. * Fixed RB weights (repeat here for clarity) -> use scalar() in constructor
+. scalar Wg = 0.366003594
+{txt}
+{com}. scalar Wm = 0.390981129
+{txt}
+{com}. scalar Wa = 0.101758435
+{txt}
+{com}. scalar Wh = 0.141256842
+{txt}
+{com}. matrix w = ( scalar(Wg) \ scalar(Wm) \ scalar(Wa) \ scalar(Wh) )   // 4x1
+{txt}
+{com}. 
+. * Contribution to return (elementwise product via diag)
+. quietly mean r_goog_s r_msft_s r_ma_s r_hd_s
+{txt}
+{com}. matrix mu = e(b)'                           // 4x1 means
+{txt}
+{com}. matrix c_ret = diag(w) * mu                 // 4x1
+{txt}
+{com}. 
+. * Risk contributions (Euler): rc_i = w_i * (S * w)_i
+. quietly corr r_goog_s r_msft_s r_ma_s r_hd_s, cov
+{txt}
+{com}. matrix S  = r(C)
+{txt}
+{com}. matrix Sw = S * w
+{txt}
+{com}. matrix Vp = w' * Sw
+{txt}
+{com}. scalar port_var = Vp[1,1]
+{txt}
+{com}. matrix rc = diag(w) * Sw
+{txt}
+{com}. scalar invvar = 1/port_var
+{txt}
+{com}. matrix rc_pct = rc * invvar
+{txt}
+{com}. 
+. * Export tidy table
+. clear
+{txt}
+{com}. set obs 4
+{txt}{p}
+Number of observations ({bf:_N}) was 0,
+now 4.
+{p_end}
+
+{com}. gen str8 name = ""
+{txt}(4 missing values generated)
+
+{com}. replace name = "GOOGL" in 1
+{txt}(1 real change made)
+
+{com}. replace name = "MSFT"  in 2
+{txt}(1 real change made)
+
+{com}. replace name = "MA"    in 3
+{txt}(1 real change made)
+
+{com}. replace name = "HD"    in 4
+{txt}(1 real change made)
+
+{com}. gen double contrib_return   = .
+{txt}(4 missing values generated)
+
+{com}. gen double risk_contrib     = .
+{txt}(4 missing values generated)
+
+{com}. gen double risk_contrib_pct = .
+{txt}(4 missing values generated)
+
+{com}. forvalues i=1/4 {c -(}
+{txt}  2{com}.     replace contrib_return   = c_ret[`i',1]  in `i'
+{txt}  3{com}.     replace risk_contrib     = rc[`i',1]     in `i'
+{txt}  4{com}.     replace risk_contrib_pct = rc_pct[`i',1] in `i'
+{txt}  5{com}. {c )-}
+{txt}(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+
+{com}. export delimited using "`root'/output/tables/attribution_by_stock.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/attribution_by_stock.csv} saved
+
+{com}. 
+. ****************************************************
+. * 6) Sub-period summary (Pre, Recession, COVID era, Post) — robust to short windows
+. ****************************************************
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. gen byte pre  = inrange(m, tm(2015m1), tm(2019m12))
+{txt}
+{com}. gen byte rec  = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. gen byte era  = inrange(m, tm(2020m3), tm(2021m12))   // COVID era
+{txt}
+{com}. gen byte post = inrange(m, tm(2022m1), tm(2025m8))
+{txt}
+{com}. 
+. tempname T
+{txt}
+{com}. postfile `T' str10 period double sharpe sortino alpha_capm p_capm using ///
+>     "`root'/output/tables/subperiod_summary.dta", replace
+{txt}
+{com}. 
+. foreach P in pre rec era post {c -(}
+{txt}  2{com}.     preserve
+{txt}  3{com}.         keep if `P'
+{txt}  4{com}.         quietly count
+{txt}  5{com}.         local N = r(N)
+{txt}  6{com}. 
+.         * Sharpe & Sortino (annualized from monthly)
+.         quietly summarize rp_rb_ex
+{txt}  7{com}.         scalar mu = r(mean)
+{txt}  8{com}.         scalar sd = r(sd)
+{txt}  9{com}.         scalar sh = .
+{txt} 10{com}.         if sd>0 scalar sh = (sqrt(12)*mu)/sd
+{txt} 11{com}.         gen double _negsq = cond(rp_rb_ex<0, rp_rb_ex^2, 0)
+{txt} 12{com}.         quietly summarize _negsq, meanonly
+{txt} 13{com}.         scalar dd = sqrt(r(mean))
+{txt} 14{com}.         drop _negsq
+{txt} 15{com}.         scalar so = .
+{txt} 16{com}.         if dd>0 scalar so = (sqrt(12)*mu)/dd
+{txt} 17{com}. 
+.         * Choose HAC lag based on sample size; fall back to OLS if needed
+.         scalar L = min(6, max(0, floor((`N'-2)/4)))
+{txt} 18{com}.         local LAG = scalar(L)
+{txt} 19{com}. 
+.         capture noisily newey rp_rb_ex r_mkt_ex, lag(`LAG')
+{txt} 20{com}.         if _rc {c -(}
+{txt} 21{com}.             * OLS fallback for ultra short windows (e.g., 3 months)
+.             regress rp_rb_ex r_mkt_ex
+{txt} 22{com}.             scalar a  = _b[_cons]
+{txt} 23{com}.             test _cons = 0
+{txt} 24{com}.             scalar pa = r(p)
+{txt} 25{com}.         {c )-}
+{txt} 26{com}.         else {c -(}
+{txt} 27{com}.             scalar a  = _b[_cons]
+{txt} 28{com}.             test _cons = 0
+{txt} 29{com}.             scalar pa = r(p)
+{txt} 30{com}.         {c )-}
+{txt} 31{com}. 
+.         post `T' ("`P'") (scalar(sh)) (scalar(so)) (scalar(a)) (scalar(pa))
+{txt} 32{com}.     restore
+{txt} 33{com}. {c )-}
+{txt}(68 observations deleted)
+
+Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}        59
+{txt}Maximum lag = {res}6{col 49}{txt}F(  1,        57){col 67}= {res}    127.39
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 4}r_mkt_ex {c |}{col 14}{res}{space 2} 1.062187{col 26}{space 2} .0941098{col 37}{space 1}   11.29{col 46}{space 3}0.000{col 54}{space 4}  .873736{col 67}{space 3} 1.250639
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0092678{col 26}{space 2} .0032592{col 37}{space 1}    2.84{col 46}{space 3}0.006{col 54}{space 4} .0027414{col 67}{space 3} .0157941
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,    57) ={res}    8.09
+{txt}{col 13}Prob > F ={res}    0.0062
+{txt}(125 observations deleted)
+
+Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}         3
+{txt}Maximum lag = {res}0{col 49}{txt}F(  1,         1){col 67}= {res}1864702.88
+{col 49}{txt}Prob > F{col 67}= {res}    0.0005
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 4}r_mkt_ex {c |}{col 14}{res}{space 2} .9605493{col 26}{space 2} .0007034{col 37}{space 1} 1365.54{col 46}{space 3}0.000{col 54}{space 4} .9516115{col 67}{space 3} .9694872
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0244908{col 26}{space 2} .0000902{col 37}{space 1}  271.62{col 46}{space 3}0.002{col 54}{space 4} .0233451{col 67}{space 3} .0256364
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,     1) ={res}73778.91
+{txt}{col 13}Prob > F ={res}    0.0023
+{txt}(106 observations deleted)
+
+Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}        22
+{txt}Maximum lag = {res}5{col 49}{txt}F(  1,        20){col 67}= {res}    127.87
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 4}r_mkt_ex {c |}{col 14}{res}{space 2} .9854356{col 26}{space 2} .0871457{col 37}{space 1}   11.31{col 46}{space 3}0.000{col 54}{space 4} .8036529{col 67}{space 3} 1.167218
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2}   .00882{col 26}{space 2} .0041187{col 37}{space 1}    2.14{col 46}{space 3}0.045{col 54}{space 4} .0002286{col 67}{space 3} .0174115
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,    20) ={res}    4.59
+{txt}{col 13}Prob > F ={res}    0.0447
+{txt}(84 observations deleted)
+
+Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}        44
+{txt}Maximum lag = {res}6{col 49}{txt}F(  1,        42){col 67}= {res}    315.70
+{col 49}{txt}Prob > F{col 67}= {res}    0.0000
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 4}r_mkt_ex {c |}{col 14}{res}{space 2}  1.01361{col 26}{space 2} .0570474{col 37}{space 1}   17.77{col 46}{space 3}0.000{col 54}{space 4} .8984838{col 67}{space 3} 1.128736
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0003785{col 26}{space 2} .0042606{col 37}{space 1}    0.09{col 46}{space 3}0.930{col 54}{space 4}-.0082197{col 67}{space 3} .0089767
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}_cons = 0{p_end}
+
+{txt}       F(  1,    42) ={res}    0.01
+{txt}{col 13}Prob > F ={res}    0.9296
+{txt}
+{com}. postclose `T'
+{txt}
+{com}. use "`root'/output/tables/subperiod_summary.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/subperiod_summary.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/subperiod_summary.csv} saved
+
+{com}. 
+. di as result "04 completed — metrics, factors, rolling β, attribution, and sub-period tables written."
+{res}04 completed — metrics, factors, rolling β, attribution, and sub-period tables written.
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. do "`root'/05_macro_regs_mac.do"
+{txt}
+{com}. ****************************************************
+. * 05_macro_regs_mac.do  (Stata 18)
+. * Macro regressions using portfolio excess returns.
+. * - MAIN contemporaneous spec with HAC(6)
+. * - Optional predictive spec (t+1) guarded
+. * - Robust export; no crashes on missing/short windows
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * ---------- Paths ----------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * ---------- Load master ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly   // %tm, 2015m1–2025m8
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * ---------- Build / verify macro regressors ----------
+. * Targets:
+. *   infl        : inflation rate
+. *   d_unrate    : Δ unemployment (pp)
+. *   d_fed       : Δ fed funds (pp)
+. *   d_sent      : Δ ln(UMich sentiment)
+. *   d_logepu    : Δ ln(EPU)
+. *   covid       : 1 for 2020m2–2020m4
+. 
+. capture confirm variable infl
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable cpi_yoy
+.     if !_rc gen infl = cpi_yoy
+. {c )-}
+{txt}
+{com}. 
+. capture confirm variable d_unrate
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable unrate
+.     if !_rc gen d_unrate = D.unrate
+. {c )-}
+{txt}
+{com}. 
+. capture confirm variable d_fed
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable fedfunds
+.     if !_rc gen double d_fed = D.fedfunds
+.     else {c -(}
+.         capture confirm variable fed
+.         if !_rc gen double d_fed = D.fed
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. capture confirm variable d_sent
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable umcsent
+.     if !_rc {c -(}
+.         gen double ln_umcsent = cond(umcsent>0, ln(umcsent), .)
+.         gen double d_sent = D.ln_umcsent
+.         label var d_sent "Δ ln(UMich sentiment)"
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. capture confirm variable d_logepu
+{txt}
+{com}. if _rc {c -(}
+.     local E ""
+.     foreach e in epu EPU epu_idx {c -(}
+{txt}  2{com}.         capture confirm variable `e'
+{txt}  3{com}.         if !_rc local E "`e'"
+{txt}  4{com}.     {c )-}
+.     if "`E'" != "" {c -(}
+.         gen double ln_epu = cond(`E'>0, ln(`E'), .)
+.         gen double d_logepu = D.ln_epu
+.         label var d_logepu "Δ ln(EPU)"
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. capture confirm variable covid
+{txt}
+{com}. if _rc gen byte covid = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. 
+. * Final check
+. foreach v in infl d_unrate d_fed d_sent d_logepu covid {c -(}
+{txt}  2{com}.     capture confirm variable `v'
+{txt}  3{com}.     if _rc {c -(}
+{txt}  4{com}.         di as error "Missing regressor: `v'. Please create or merge it."
+{txt}  5{com}.         exit 111
+{txt}  6{com}.     {c )-}
+{txt}  7{com}. {c )-}
+{txt}
+{com}. 
+. * Keep usable rows (no NA in regressands/regressors)
+. keep if !missing(rp_rb_ex, infl, d_unrate, d_fed, d_sent, d_logepu, covid)
+{txt}(1 observation deleted)
+
+{com}. 
+. ****************************************************
+. * MAIN: Newey–West (lag=6) on contemporaneous log-excess
+. ****************************************************
+. newey rp_rb_ex infl d_unrate d_fed d_sent d_logepu covid, lag(6)
+
+{txt}Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}       127
+{txt}Maximum lag = {res}6{col 49}{txt}F(  6,       120){col 67}= {res}      5.05
+{col 49}{txt}Prob > F{col 67}= {res}    0.0001
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 8}infl {c |}{col 14}{res}{space 2}-.9416668{col 26}{space 2} 2.048542{col 37}{space 1}   -0.46{col 46}{space 3}0.647{col 54}{space 4}-4.997638{col 67}{space 3} 3.114304
+{txt}{space 4}d_unrate {c |}{col 14}{res}{space 2} .0071264{col 26}{space 2} .0052752{col 37}{space 1}    1.35{col 46}{space 3}0.179{col 54}{space 4}-.0033182{col 67}{space 3}  .017571
+{txt}{space 7}d_fed {c |}{col 14}{res}{space 2} .0059359{col 26}{space 2} .0359232{col 37}{space 1}    0.17{col 46}{space 3}0.869{col 54}{space 4}-.0651894{col 67}{space 3} .0770613
+{txt}{space 6}d_sent {c |}{col 14}{res}{space 2} .0483774{col 26}{space 2} .0872802{col 37}{space 1}    0.55{col 46}{space 3}0.580{col 54}{space 4}-.1244313{col 67}{space 3} .2211861
+{txt}{space 4}d_logepu {c |}{col 14}{res}{space 2} .0035779{col 26}{space 2} .0075335{col 37}{space 1}    0.47{col 46}{space 3}0.636{col 54}{space 4}-.0113379{col 67}{space 3} .0184937
+{txt}{space 3}covid_era {c |}{col 14}{res}{space 2} .0217046{col 26}{space 2} .0083783{col 37}{space 1}    2.59{col 46}{space 3}0.011{col 54}{space 4} .0051161{col 67}{space 3} .0382931
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0147119{col 26}{space 2} .0054023{col 37}{space 1}    2.72{col 46}{space 3}0.007{col 54}{space 4} .0040159{col 67}{space 3}  .025408
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{com}. 
+. * Joint significance of macro block
+. test infl d_unrate d_fed d_sent d_logepu covid
+
+{p 0 7}{space 1}{text:( 1)}{space 1} {res}infl = 0{p_end}
+{p 0 7}{space 1}{text:( 2)}{space 1} d_unrate = 0{p_end}
+{p 0 7}{space 1}{text:( 3)}{space 1} d_fed = 0{p_end}
+{p 0 7}{space 1}{text:( 4)}{space 1} d_sent = 0{p_end}
+{p 0 7}{space 1}{text:( 5)}{space 1} d_logepu = 0{p_end}
+{p 0 7}{space 1}{text:( 6)}{space 1} covid_era = 0{p_end}
+
+{txt}       F(  6,   120) ={res}    5.05
+{txt}{col 13}Prob > F ={res}    0.0001
+{txt}
+{com}. scalar p_joint = r(p)
+{txt}
+{com}. 
+. * ---------- Tidy export ----------
+. tempname fh
+{txt}
+{com}. postfile `fh' str20 var double beta se pval using ///
+>     "`root'/output/tables/macro_regression.dta", replace
+{txt}
+{com}. 
+. matrix B = e(b)
+{txt}
+{com}. matrix V = e(V)
+{txt}
+{com}. local names : colfullnames B
+{txt}
+{com}. scalar df = e(df_r)
+{txt}
+{com}. 
+. foreach nm of local names {c -(}
+{txt}  2{com}.     scalar b = B[1,"`nm'"]
+{txt}  3{com}.     scalar s = sqrt(V["`nm'","`nm'"])
+{txt}  4{com}.     scalar p = 2*ttail(df, abs(b/s))
+{txt}  5{com}.     post `fh' ("`nm'") (b) (s) (p)
+{txt}  6{com}. {c )-}
+{txt}
+{com}. postclose `fh'
+{txt}
+{com}. 
+. use "`root'/output/tables/macro_regression.dta", clear
+{txt}
+{com}. drop if var=="_cons"
+{txt}(1 observation deleted)
+
+{com}. format beta se %9.4f
+{txt}
+{com}. 
+. * Append joint p-value
+. set obs `=_N+1'
+{txt}{p}
+Number of observations ({bf:_N}) was 6,
+now 7.
+{p_end}
+
+{com}. replace var  = "Joint (all macros)" in L
+{txt}(1 real change made)
+
+{com}. replace pval = p_joint               in L
+{txt}(1 real change made)
+
+{com}. 
+. export delimited using "`root'/output/tables/macro_regression.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/macro_regression.csv} saved
+
+{com}. di as result "Saved -> `root'/output/tables/macro_regression.csv"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/tables/macro_regression.csv
+{txt}
+{com}. 
+. ****************************************************
+. * OPTIONAL: Predictive spec (guarded)
+. ****************************************************
+. * Uncomment to run:
+. * newey F1.rp_rb_ex infl d_unrate d_fed d_sent d_logepu covid, lag(6)
+. * newey F1.rp_rb_ex L(0/3).infl L(0/3).d_unrate L(0/3).d_fed ///
+> *                    L(0/3).d_sent L(0/3).d_logepu covid, lag(6)
+. * reg  rp_rb_ex infl d_unrate d_fed d_sent d_logepu covid
+. * estat vif
+. 
+{txt}end of do-file
+
+{com}. do "`root'/06_eventstudy_monthly_mac.do"
+{txt}
+{com}. ****************************************************
+. * 06_eventstudy_monthly_mac.do   (Stata 18)
+. * Monthly market-model CARs for GOOG, MSFT, MA, HD
+. * Event window: Feb–Apr 2020
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * -------- Paths --------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * -------- Windows --------
+. local EST_START = tm(2019m1)
+{txt}
+{com}. local EST_END   = tm(2020m1)
+{txt}
+{com}. local EVT_START = tm(2020m2)
+{txt}
+{com}. local EVT_MID   = tm(2020m3)
+{txt}
+{com}. local EVT_END   = tm(2020m4)
+{txt}
+{com}. local K         = 3    // number of event months
+{txt}
+{com}. 
+. * -------- CAR table --------
+. tempname P
+{txt}
+{com}. postfile `P' str6 ticker double CAR SE_CAR T P using ///
+>     "`root'/output/tables/event_cars_monthly.dta", replace
+{txt}
+{com}. 
+. * -------- Loop across tickers --------
+. foreach s in goog msft ma hd {c -(}
+{txt}  2{com}. 
+.     preserve
+{txt}  3{com}.         use "`root'/output/data/monthly_returns.dta", clear
+{txt}  4{com}.         tsset m, monthly
+{txt}  5{com}. 
+.         * 1) Estimate market model on PRE-event window
+.         * (OLS is standard; Newey–West can be used but is optional)
+.         regress r_`s'_m r_mkt_m if inrange(m, `EST_START', `EST_END')
+{txt}  6{com}.         scalar rmse = e(rmse)
+{txt}  7{com}.         scalar df   = e(df_r)
+{txt}  8{com}. 
+.         * 2) Abnormal returns in the event window (residuals)
+.         predict double u if inrange(m, `EVT_START', `EVT_END'), resid
+{txt}  9{com}. 
+.         * 3) CAR path and total
+.         gen byte evt = inrange(m, `EVT_START', `EVT_END')
+{txt} 10{com}.         bysort evt (m): gen double car_path = cond(evt, sum(u), .)
+{txt} 11{com}.         egen double car_total = total(u) if evt
+{txt} 12{com}.         quietly summarize car_total, meanonly
+{txt} 13{com}.         scalar CAR   = r(max)
+{txt} 14{com}.         scalar SE_CAR = rmse*sqrt(`K')
+{txt} 15{com}.         scalar Tstat  = CAR/SE_CAR
+{txt} 16{com}.         scalar Pval   = 2*ttail(df, abs(Tstat))
+{txt} 17{com}. 
+.         * Write row
+.         post `P' ("`s'") (CAR) (SE_CAR) (Tstat) (Pval)
+{txt} 18{com}. 
+.         * 4) Plot CAR path (full-height grey band)
+.         keep if evt
+{txt} 19{com}.         sort m
+{txt} 20{com}.         quietly summarize car_path
+{txt} 21{com}.         local lo  = r(min)
+{txt} 22{com}.         local hi  = r(max)
+{txt} 23{com}.         local pad = 0.03*(`hi' - `lo')
+{txt} 24{com}.         if `pad'==0 local pad = 0.01
+{txt} 25{com}.         local y0 = `lo' - `pad'
+{txt} 26{com}.         local y1 = `hi' + `pad'
+{txt} 27{com}.         gen double ylo = `y0'
+{txt} 28{com}.         gen double yhi = `y1'
+{txt} 29{com}. 
+.         twoway ///
+>           (rbar yhi ylo m, bcolor(gs14%60) lcolor(none)) ///
+>           (line car_path m, lwidth(medthick) lcolor(cranberry)), ///
+>           yscale(range(`y0' `y1')) ///
+>           xscale(range(`EVT_START' `EVT_END')) ///
+>           xlabel(`EVT_START'(1)`EVT_END', format(%tmMon_CCYY) angle(45)) ///
+>           xline(`EVT_MID', lpattern(dash)) ///
+>           title("`=upper("`s'")' CAR (Feb–Apr 2020)") ///
+>           ytitle("Cumulative abnormal return") xtitle("Month") legend(off) ///
+>           graphregion(color(white)) plotregion(color(white))
+{txt} 30{com}. 
+.         graph save   "`root'/output/figures/event_car_`s'_monthly.gph", replace
+{txt} 31{com}.         graph export "`root'/output/figures/event_car_`s'_monthly.png", width(2000) replace
+{txt} 32{com}.     restore
+{txt} 33{com}. {c )-}
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     2.84
+{txt}       Model {c |} {res} .006070653         1  .006070653   {txt}Prob > F        ={res}    0.1198
+{txt}    Residual {c |} {res} .023478805        11  .002134437   {txt}R-squared       ={res}    0.2054
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.1332
+{txt}       Total {c |} {res} .029549458        12  .002462455   {txt}Root MSE        =   {res}  .0462
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}    r_goog_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .6257095{col 26}{space 2} .3710195{col 37}{space 1}    1.69{col 46}{space 3}0.120{col 54}{space 4}-.1908989{col 67}{space 3} 1.442318
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0111235{col 26}{space 2} .0150015{col 37}{space 1}    0.74{col 46}{space 3}0.474{col 54}{space 4}-.0218945{col 67}{space 3} .0441416
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 observations deleted)
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_goog_monthly.gph} saved
+{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_goog_monthly.png{rm}
+saved as
+PNG
+format
+{p_end}
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     8.16
+{txt}       Model {c |} {res} .008093681         1  .008093681   {txt}Prob > F        ={res}    0.0156
+{txt}    Residual {c |} {res} .010915287        11  .000992299   {txt}R-squared       ={res}    0.4258
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.3736
+{txt}       Total {c |} {res} .019008968        12  .001584081   {txt}Root MSE        =   {res}  .0315
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}    r_msft_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .7224837{col 26}{space 2} .2529742{col 37}{space 1}    2.86{col 46}{space 3}0.016{col 54}{space 4} .1656912{col 67}{space 3} 1.279276
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0256674{col 26}{space 2} .0102286{col 37}{space 1}    2.51{col 46}{space 3}0.029{col 54}{space 4} .0031545{col 67}{space 3} .0481803
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 observations deleted)
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_msft_monthly.gph} saved
+{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_msft_monthly.png{rm}
+saved as
+PNG
+format
+{p_end}
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     6.93
+{txt}       Model {c |} {res} .006694866         1  .006694866   {txt}Prob > F        ={res}    0.0233
+{txt}    Residual {c |} {res} .010622448        11  .000965677   {txt}R-squared       ={res}    0.3866
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.3308
+{txt}       Total {c |} {res} .017317314        12   .00144311   {txt}Root MSE        =   {res} .03108
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}      r_ma_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .6570917{col 26}{space 2} .2495577{col 37}{space 1}    2.63{col 46}{space 3}0.023{col 54}{space 4} .1078189{col 67}{space 3} 1.206365
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0263787{col 26}{space 2} .0100904{col 37}{space 1}    2.61{col 46}{space 3}0.024{col 54}{space 4} .0041699{col 67}{space 3} .0485876
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 observations deleted)
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_ma_monthly.gph} saved
+{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_ma_monthly.png{rm}
+saved as
+PNG
+format
+{p_end}
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     4.24
+{txt}       Model {c |} {res} .007884536         1  .007884536   {txt}Prob > F        ={res}    0.0640
+{txt}    Residual {c |} {res} .020467188        11  .001860653   {txt}R-squared       ={res}    0.2781
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.2125
+{txt}       Total {c |} {res} .028351724        12  .002362644   {txt}Root MSE        =   {res} .04314
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}      r_hd_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2}  .713088{col 26}{space 2} .3464079{col 37}{space 1}    2.06{col 46}{space 3}0.064{col 54}{space 4}-.0493507{col 67}{space 3} 1.475527
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0088592{col 26}{space 2} .0140064{col 37}{space 1}    0.63{col 46}{space 3}0.540{col 54}{space 4}-.0219686{col 67}{space 3} .0396871
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 observations deleted)
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_hd_monthly.gph} saved
+{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_hd_monthly.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. postclose `P'
+{txt}
+{com}. 
+. * -------- Export CAR results --------
+. use "`root'/output/tables/event_cars_monthly.dta", clear
+{txt}
+{com}. order ticker CAR SE_CAR T P
+{txt}
+{com}. format CAR SE_CAR %9.4f
+{txt}
+{com}. export delimited using "`root'/output/tables/event_cars_monthly.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/event_cars_monthly.csv} saved
+
+{com}. display as result "Saved -> `root'/output/tables/event_cars_monthly.csv"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/tables/event_cars_monthly.csv
+{txt}
+{com}. 
+. * -------- 2×2 panel --------
+. capture noisily graph combine ///
+>     "`root'/output/figures/event_car_goog_monthly.gph" ///
+>     "`root'/output/figures/event_car_msft_monthly.gph" ///
+>     "`root'/output/figures/event_car_ma_monthly.gph"   ///
+>     "`root'/output/figures/event_car_hd_monthly.gph",  ///
+>     col(2) imargin(2 2 2 2) graphregion(color(white))
+{res}{txt}
+{com}. if _rc==0 {c -(}
+.     graph save   "`root'/output/figures/event_car_panel.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_panel.gph} saved
+{com}.     graph export "`root'/output/figures/event_car_panel.png", width(2400) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/event_car_panel.png{rm}
+saved as
+PNG
+format
+{p_end}
+{com}. {c )-}
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. 
+. * 3) Upgrades (this message)
+. capture noisily do "`root'/04a_distribution_downside_mac.do"
+{txt}
+{com}. ****************************************************
+. * 04a_distribution_downside_mac.do  (Stata 18)
+. * Monthly distribution & downside risk for RB portfolio
+. * - Skewness, excess kurtosis, Jarque–Bera
+. * - Historical VaR(5%) and CVaR(5%) (simple returns)
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * ---------- Paths ----------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. 
+. * ---------- Data ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * Ensure simple returns exist
+. capture confirm variable rp_rb_s
+{txt}
+{com}. if _rc gen double rp_rb_s = exp(r_p_rb_m) - 1
+{txt}
+{com}. 
+. * Core stats
+. quietly count if !missing(rp_rb_s)
+{txt}
+{com}. scalar N = r(N)
+{txt}
+{com}. 
+. quietly summarize rp_rb_s, detail
+{txt}
+{com}. scalar mu_s  = r(mean)
+{txt}
+{com}. scalar sd_s  = r(sd)
+{txt}
+{com}. scalar sk    = r(skewness)
+{txt}
+{com}. scalar kurt  = r(kurtosis)
+{txt}
+{com}. scalar exk   = kurt - 3
+{txt}
+{com}. scalar var5  = r(p5)
+{txt}
+{com}. 
+. * CVaR: average below VaR
+. quietly summarize rp_rb_s if rp_rb_s <= var5, meanonly
+{txt}
+{com}. scalar cvar5 = r(mean)
+{txt}
+{com}. 
+. * Jarque–Bera test statistic & p-value
+. scalar JB  = N/6 * (sk^2 + (exk^2)/4)
+{txt}
+{com}. scalar pJB = chi2tail(2, JB)
+{txt}
+{com}. 
+. * ---------- Export ----------
+. postfile D str28 metric double value using ///
+>     "`root'/output/tables/distribution_downside.dta", replace
+{txt}
+{com}. post D ("N (months)")            (N)
+{txt}
+{com}. post D ("Mean (simple)")         (mu_s)
+{txt}
+{com}. post D ("SD (simple)")           (sd_s)
+{txt}
+{com}. post D ("Skewness")              (sk)
+{txt}
+{com}. post D ("Excess kurtosis")       (exk)
+{txt}
+{com}. post D ("Jarque–Bera chi2")      (JB)
+{txt}
+{com}. post D ("JB p-value")            (pJB)
+{txt}
+{com}. post D ("VaR 5% (hist)")         (var5)
+{txt}
+{com}. post D ("CVaR 5% (hist)")        (cvar5)
+{txt}
+{com}. postclose D
+{txt}
+{com}. 
+. use "`root'/output/tables/distribution_downside.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/distribution_downside.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/distribution_downside.csv} saved
+
+{com}. di as result "Wrote -> output/tables/distribution_downside.csv"
+{res}Wrote -> output/tables/distribution_downside.csv
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. capture noisily do "`root'/04b_sharpe_inference_mac.do"
+{txt}
+{com}. ****************************************************
+. * 04b_sharpe_inference_mac.do  (Stata 18)
+. * Robust Sharpe inference for monthly log excess
+. * - Annualized Sharpe (from monthly)
+. * - Lo (2002): HAC t-stat for mean=0 with lag(6)
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. 
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * Monthly Sharpe on log-excess
+. quietly summarize rp_rb_ex
+{txt}
+{com}. scalar mu = r(mean)
+{txt}
+{com}. scalar sd = r(sd)
+{txt}
+{com}. scalar Sharpe_m   = mu/sd
+{txt}
+{com}. scalar Sharpe_ann = sqrt(12)*Sharpe_m
+{txt}
+{com}. 
+. * Lo (2002): HAC t-stat for mu=0 (which is the Sharpe=0 null)
+. newey rp_rb_ex, lag(6)
+
+{txt}Regression with Newey–West standard errors{col 49}Number of obs{col 67}= {res}       127
+{txt}Maximum lag = {res}6{col 49}{txt}F(  0,       126){col 67}= {res}         .
+{col 49}{txt}Prob > F{col 67}= {res}         .
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 14}{c |}{col 26}  Newey–West
+{col 1}    rp_rb_ex{col 14}{c |} Coefficient{col 26}  std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 7}_cons {c |}{col 14}{res}{space 2} .0161406{col 26}{space 2} .0040693{col 37}{space 1}    3.97{col 46}{space 3}0.000{col 54}{space 4} .0080876{col 67}{space 3} .0241936
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+
+{com}. scalar t_Lo = _b[_cons]/_se[_cons]
+{txt}
+{com}. scalar p_Lo = 2*ttail(e(df_r), abs(t_Lo))
+{txt}
+{com}. scalar N    = e(N)
+{txt}
+{com}. 
+. postfile S str32 stat double value using ///
+>     "`root'/output/tables/sharpe_inference.dta", replace
+{txt}
+{com}. post S ("Sharpe_ann (log-excess)") (Sharpe_ann)
+{txt}
+{com}. post S ("Lo HAC t-stat (mu=0)")    (t_Lo)
+{txt}
+{com}. post S ("Lo HAC p-value")          (p_Lo)
+{txt}
+{com}. post S ("N (months)")              (N)
+{txt}
+{com}. postclose S
+{txt}
+{com}. 
+. use "`root'/output/tables/sharpe_inference.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/sharpe_inference.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/sharpe_inference.csv} saved
+
+{com}. di as result "Wrote -> output/tables/sharpe_inference.csv"
+{res}Wrote -> output/tables/sharpe_inference.csv
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. capture noisily do "`root'/04c_rolling_alpha_robustness_mac.do"
+{txt}
+{com}. ****************************************************
+. * 04c_rolling_alpha_robustness_mac.do  (Stata 18)
+. * Rolling 60m alphas:
+. *   - CAPM (log)
+. *   - FF5+UMD (simple)
+. * Optional: HXZ q-factors (simple) if variables exist
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/data"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * ---------- Helpers ----------
+. program drop _all
+{txt}
+{com}. program define _make_band
+{txt}  1{com}.     syntax varlist(min=1 max=1)
+{txt}  2{com}.     quietly su `varlist'
+{txt}  3{com}.     local lo = r(min)
+{txt}  4{com}.     local hi = r(max)
+{txt}  5{com}.     local pad = 0.03*(`hi' - `lo')
+{txt}  6{com}.     gen double y0 = `lo' - `pad'
+{txt}  7{com}.     gen double y1 = `hi' + `pad'
+{txt}  8{com}. end
+{txt}
+{com}. 
+. * ---------- CAPM (log) rolling alpha ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. rolling _b, window(60) saving("`root'/output/data/rollalpha_capm_log60.dta", replace): ///
+>     regress rp_rb_ex r_mkt_ex
+{res}{txt}(running {bf:regress} on estimation sample)
+{res}
+{text}Rolling replications ({result:69}){text}: {res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}10{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}20{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}30{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}40{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}50{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}60{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{text} done
+{res}{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollalpha_capm_log60.dta{rm}
+saved
+{p_end}
+
+{com}. use "`root'/output/data/rollalpha_capm_log60.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen m = end
+{txt}
+{com}. format m %tm
+{txt}
+{com}. rename _b_cons alpha
+{res}{txt}
+{com}. keep m alpha
+{txt}
+{com}. save "`root'/output/data/rollalpha_capm_log60_clean.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollalpha_capm_log60_clean.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. use "`root'/output/data/rollalpha_capm_log60_clean.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. _make_band alpha
+{txt}
+{com}. twoway (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>        (line alpha m, lwidth(medthick)), ///
+>        title("Rolling 60m α — CAPM (log)") ///
+>        ytitle("Monthly α") xtitle("Month") legend(off) ///
+>        graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_rolling_alpha_capm_log60.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_alpha_capm_log60.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_rolling_alpha_capm_log60.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_alpha_capm_log60.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * ---------- FF5+UMD (simple) rolling alpha ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. rolling _b, window(60) saving("`root'/output/data/rollalpha_ff6_simp60.dta", replace): ///
+>     regress rp_rb_ex_s mkt_rf smb hml rmw cma umd
+{res}{txt}(running {bf:regress} on estimation sample)
+{res}
+{text}Rolling replications ({result:69}){text}: {res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}10{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}20{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}30{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}40{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}50{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}60{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{res}{text}.{text} done
+{res}{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollalpha_ff6_simp60.dta{rm}
+saved
+{p_end}
+
+{com}. use "`root'/output/data/rollalpha_ff6_simp60.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen m = end
+{txt}
+{com}. format m %tm
+{txt}
+{com}. rename _b_cons alpha
+{res}{txt}
+{com}. keep m alpha
+{txt}
+{com}. save "`root'/output/data/rollalpha_ff6_simp60_clean.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/data/rollalpha_ff6_simp60_clean.dta{rm}
+saved
+{p_end}
+
+{com}. 
+. use "`root'/output/data/rollalpha_ff6_simp60_clean.dta", clear
+{txt}(rolling: regress)
+
+{com}. gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+{txt}
+{com}. _make_band alpha
+{txt}
+{com}. twoway (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>        (line alpha m, lwidth(medthick)), ///
+>        title("Rolling 60m α — FF5+UMD (simple)") ///
+>        ytitle("Monthly α") xtitle("Month") legend(off) ///
+>        graphregion(color(white)) plotregion(color(white))
+{res}{txt}
+{com}. graph save   "`root'/output/figures/fig_rolling_alpha_ff6_simp60.gph", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_alpha_ff6_simp60.gph} saved
+
+{com}. graph export "`root'/output/figures/fig_rolling_alpha_ff6_simp60.png", width(2200) replace
+{txt}{p 0 4 2}
+file {bf}
+/Users/johnmohmedi/Desktop/MGT3009/output/figures/fig_rolling_alpha_ff6_simp60.png{rm}
+saved as
+PNG
+format
+{p_end}
+
+{com}. 
+. * ---------- Optional: HXZ q-factors (simple) ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. capture confirm variable q_mkt
+{txt}
+{com}. if !_rc {c -(}
+.     capture confirm variable q_me
+.     capture confirm variable q_ia
+.     capture confirm variable q_ro
+. {c )-}
+{txt}
+{com}. if !_rc {c -(}
+.     rolling _b, window(60) saving("`root'/output/data/rollalpha_hxz60.dta", replace): ///
+>         regress rp_rb_ex_s q_mkt q_me q_ia q_ro
+.     use "`root'/output/data/rollalpha_hxz60.dta", clear
+.     gen m = end
+.     format m %tm
+.     rename _b_cons alpha
+.     keep m alpha
+.     save "`root'/output/data/rollalpha_hxz60_clean.dta", replace
+. 
+.     use "`root'/output/data/rollalpha_hxz60_clean.dta", clear
+.     gen byte rec = inrange(m, tm(2020m2), tm(2020m4))
+.     _make_band alpha
+.     twoway (rbar y0 y1 m if rec, bcolor(gs12%60) lcolor(none)) ///
+>            (line alpha m, lwidth(medthick)), ///
+>            title("Rolling 60m α — HXZ q-factors (simple)") ///
+>            ytitle("Monthly α") xtitle("Month") legend(off) ///
+>            graphregion(color(white)) plotregion(color(white))
+.     graph export "`root'/output/figures/fig_rolling_alpha_hxz60.png", width(2200) replace
+. {c )-}
+{txt}
+{com}. else {c -(}
+.     di as txt "HXZ q-factors not found in master_monthly; skipping robustness alpha."
+{res}{txt}HXZ q-factors not found in master_monthly; skipping robustness alpha.
+{com}. {c )-}
+{txt}
+{com}. di as result "Wrote rolling alpha figures to output/figures/"
+{res}Wrote rolling alpha figures to output/figures/
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. capture noisily do "`root'/05b_macro_predictability_oos_mac.do"
+{txt}
+{com}. ****************************************************
+. * 05b_macro_predictability_oos_mac.do  (Stata 18)
+. * Monthly predictive regressions with strict OOS split
+. *   y_{c -(}t+1{c )-} = X_t * beta  (predict next-month log excess)
+. *
+. * Models:
+. *   A) F1.rp_rb_ex ~ zX_t + COVID
+. *   B) F1.rp_rb_ex ~ L(0/3).zX_t + COVID
+. *
+. * Outputs:
+. *   - output/tables/macro_predict_oos.dta/.csv
+. *   - output/tables/macro_predict_in_sample_coefs.dta/.csv
+. *   - output/tables/macro_predict_oos_timeseries.csv
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * ---------- Paths ----------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * ---------- Load master (monthly) ----------
+. use "`root'/output/data/master_monthly.dta", clear
+{txt}
+{com}. tsset m, monthly
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m8}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+{txt}
+{com}. 
+. * ---------- Must-have dependent series ----------
+. capture confirm variable rp_rb_ex
+{txt}
+{com}. if _rc {c -(}
+.     di as err "Missing required series rp_rb_ex (monthly log-excess)."
+.     exit 111
+. {c )-}
+{txt}
+{com}. 
+. * ---------- Build/verify predictors (create fallbacks if needed) ----------
+. * infl
+. capture confirm variable infl
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable cpi_yoy
+.     if !_rc gen double infl = cpi_yoy
+. {c )-}
+{txt}
+{com}. 
+. * d_unrate
+. capture confirm variable d_unrate
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable unrate
+.     if !_rc gen double d_unrate = D.unrate
+. {c )-}
+{txt}
+{com}. 
+. * d_fed
+. capture confirm variable d_fed
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable fedfunds
+.     if !_rc gen double d_fed = D.fedfunds
+.     else {c -(}
+.         capture confirm variable fed
+.         if !_rc gen double d_fed = D.fed
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. * d_sent = Δ ln(UMich sentiment)
+. capture confirm variable d_sent
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable umcsent
+.     if !_rc {c -(}
+.         gen double ln_umcsent = cond(umcsent>0, ln(umcsent), .)
+.         gen double d_sent     = D.ln_umcsent
+.         label var d_sent "Δ ln(UMich sentiment)"
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. * d_logepu = Δ ln(EPU) (try common names)
+. capture confirm variable d_logepu
+{txt}
+{com}. if _rc {c -(}
+.     local E ""
+.     foreach e in epu EPU epu_idx EPUTRADE {c -(}
+{txt}  2{com}.         capture confirm variable `e'
+{txt}  3{com}.         if !_rc local E "`e'"
+{txt}  4{com}.     {c )-}
+.     if "`E'" != "" {c -(}
+.         gen double ln_epu   = cond(`E'>0, ln(`E'), .)
+.         gen double d_logepu = D.ln_epu
+.         label var d_logepu "Δ ln(EPU)"
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. * COVID dummy (covid OR covid_era; create if absent)
+. local COVIDVAR "covid"
+{txt}
+{com}. capture confirm variable covid
+{txt}
+{com}. if _rc {c -(}
+.     capture confirm variable covid_era
+.     if !_rc local COVIDVAR "covid_era"
+.     else {c -(}
+.         gen byte covid = inrange(m, tm(2020m2), tm(2020m4))
+.         local COVIDVAR "covid"
+.     {c )-}
+. {c )-}
+{txt}
+{com}. 
+. * Final guard on X_t presence
+. foreach v in infl d_unrate d_fed d_sent d_logepu `COVIDVAR' {c -(}
+{txt}  2{com}.     capture confirm variable `v'
+{txt}  3{com}.     if _rc {c -(}
+{txt}  4{com}.         di as err "Missing required predictor: `v'."
+{txt}  5{com}.         exit 111
+{txt}  6{com}.     {c )-}
+{txt}  7{com}. {c )-}
+{txt}
+{com}. 
+. * Keep rows with complete X_t (y_{c -(}t+1{c )-} handled downstream)
+. keep if !missing(rp_rb_ex, infl, d_unrate, d_fed, d_sent, d_logepu, `COVIDVAR')
+{txt}(1 observation deleted)
+
+{com}. sort m
+{txt}
+{com}. 
+. * ---------- Split: first half train, second half OOS ----------
+. quietly count
+{txt}
+{com}. local N = r(N)
+{txt}
+{com}. if `N' < 24 {c -(}
+.     di as err "Not enough monthly observations (`N') for an OOS split."
+.     exit 200
+. {c )-}
+{txt}
+{com}. local split   = floor(`N'/2)
+{txt}
+{com}. local m_split = m[`split']     // last training month index
+{txt}
+{com}. 
+. * ---------- Standardize X using TRAIN ONLY (robust to sd=.)
+. tempname STATS
+{txt}
+{com}. postfile `STATS' str12 var double Ntrain mean sd sd_used using ///
+>     "`root'/output/tables/macro_train_stats.dta", replace
+{txt}
+{com}. 
+. local SDFLOOR = 1e-8
+{txt}
+{com}. 
+. preserve
+{txt}
+{com}.     keep in 1/`split'
+{txt}(64 observations deleted)
+
+{com}.     foreach v in infl d_unrate d_fed d_sent d_logepu {c -(}
+{txt}  2{com}.         quietly su `v', meanonly
+{txt}  3{com}.         scalar mu_`v' = r(mean)
+{txt}  4{com}.         scalar sd_`v' = r(sd)
+{txt}  5{com}.         if missing(sd_`v') | sd_`v'<=0 scalar sd_`v' = `SDFLOOR'
+{txt}  6{com}.         post `STATS' ("`v'") (r(N)) (mu_`v') (r(sd)) (sd_`v')
+{txt}  7{com}.     {c )-}
+{txt}
+{com}. restore
+{txt}
+{com}. postclose `STATS'
+{txt}
+{com}. 
+. foreach v in infl d_unrate d_fed d_sent d_logepu {c -(}
+{txt}  2{com}.     gen double z_`v' = (`v' - mu_`v')/sd_`v'
+{txt}  3{com}. {c )-}
+{txt}
+{com}. 
+. * ---------- Prep dependent (for convenience) ----------
+. gen double y_A = F1.rp_rb_ex          // next-month log excess
+{txt}(1 missing value generated)
+
+{com}. label var y_A "F1.rp_rb_ex"
+{txt}
+{com}. 
+. * ---------- Tables to post ----------
+. tempname OOS COEF
+{txt}
+{com}. postfile `OOS'  str28 model int N_train N_oos double R2_OOS RMSE_model RMSE_mean ///
+>     using "`root'/output/tables/macro_predict_oos.dta", replace
+{txt}
+{com}. postfile `COEF' str20 model str30 var double beta se t p ///
+>     using "`root'/output/tables/macro_predict_in_sample_coefs.dta", replace
+{txt}
+{com}. 
+. ****************************************************
+. * Model A: F1.rp_rb_ex ~ zX_t + COVID  (train only)
+. ****************************************************
+. reg y_A z_infl z_d_unrate z_d_fed z_d_sent z_d_logepu `COVIDVAR' if m <= `m_split'
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        63
+{txt}{hline 13}{c +}{hline 34}   F(6, 56)        = {res}     1.50
+{txt}       Model {c |} {res} .022705152         6  .003784192   {txt}Prob > F        ={res}    0.1966
+{txt}    Residual {c |} {res}  .14171525        56  .002530629   {txt}R-squared       ={res}    0.1381
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.0457
+{txt}       Total {c |} {res} .164420403        62  .002651942   {txt}Root MSE        =   {res} .05031
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}         y_A{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 6}z_infl {c |}{col 14}{res}{space 2} 7.34e-10{col 26}{space 2} 4.23e-08{col 37}{space 1}    0.02{col 46}{space 3}0.986{col 54}{space 4}-8.41e-08{col 67}{space 3} 8.55e-08
+{txt}{space 2}z_d_unrate {c |}{col 14}{res}{space 2}-1.11e-10{col 26}{space 2} 8.17e-11{col 37}{space 1}   -1.36{col 46}{space 3}0.179{col 54}{space 4}-2.75e-10{col 67}{space 3} 5.25e-11
+{txt}{space 5}z_d_fed {c |}{col 14}{res}{space 2} 2.65e-10{col 26}{space 2} 7.50e-10{col 37}{space 1}    0.35{col 46}{space 3}0.725{col 54}{space 4}-1.24e-09{col 67}{space 3} 1.77e-09
+{txt}{space 4}z_d_sent {c |}{col 14}{res}{space 2}-9.56e-10{col 26}{space 2} 2.04e-09{col 37}{space 1}   -0.47{col 46}{space 3}0.640{col 54}{space 4}-5.04e-09{col 67}{space 3} 3.12e-09
+{txt}{space 2}z_d_logepu {c |}{col 14}{res}{space 2} 1.30e-10{col 26}{space 2} 9.16e-11{col 37}{space 1}    1.42{col 46}{space 3}0.162{col 54}{space 4}-5.38e-11{col 67}{space 3} 3.13e-10
+{txt}{space 3}covid_era {c |}{col 14}{res}{space 2} .1574365{col 26}{space 2} .0999768{col 37}{space 1}    1.57{col 46}{space 3}0.121{col 54}{space 4} -.042841{col 67}{space 3} .3577141
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0131326{col 26}{space 2} .0070882{col 37}{space 1}    1.85{col 46}{space 3}0.069{col 54}{space 4}-.0010667{col 67}{space 3} .0273319
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}
+{com}. local N_train_A = e(N)
+{txt}
+{com}. 
+. * Save tidy coefs
+. matrix bA = e(b)
+{txt}
+{com}. matrix VA = e(V)
+{txt}
+{com}. local colsA : colfullnames bA
+{txt}
+{com}. scalar dfA = e(df_r)
+{txt}
+{com}. foreach nm of local colsA {c -(}
+{txt}  2{com}.     scalar b1 = bA[1,"`nm'"]
+{txt}  3{com}.     scalar s1 = sqrt(VA["`nm'","`nm'"])
+{txt}  4{com}.     scalar t1 = .
+{txt}  5{com}.     if (s1>0) scalar t1 = b1/s1
+{txt}  6{com}.     scalar p1 = .
+{txt}  7{com}.     if (s1>0) scalar p1 = 2*ttail(dfA, abs(t1))
+{txt}  8{com}.     post `COEF' ("Model A") ("`nm'") (b1) (s1) (t1) (p1)
+{txt}  9{com}. {c )-}
+{txt}
+{com}. 
+. * OOS metrics for Model A (mask & baseline aligned)
+. predict double yhat_A                     // fitted over all rows
+{txt}(option {bf:xb} assumed; fitted values)
+
+{com}. egen _missA = rowmiss(y_A yhat_A)
+{txt}
+{com}. gen  byte maskA = (m > `m_split') & (_missA==0)
+{txt}
+{com}. drop _missA
+{txt}
+{com}. 
+. * Compute SSE/RMSE/R2 using r(mean)*r(N)
+. gen double eA   = y_A - yhat_A      if maskA
+{txt}(64 missing values generated)
+
+{com}. gen double eA2  = eA^2              if maskA
+{txt}(64 missing values generated)
+
+{com}. 
+. quietly su eA2, meanonly
+{txt}
+{com}. scalar SSE_A    = r(mean) * r(N)
+{txt}
+{com}. scalar N_OOS_A  = r(N)
+{txt}
+{com}. 
+. quietly su y_A if m <= `m_split', meanonly
+{txt}
+{com}. scalar ybar_train = r(mean)
+{txt}
+{com}. 
+. gen double eAVG_A2 = (y_A - ybar_train)^2 if maskA
+{txt}(64 missing values generated)
+
+{com}. quietly su eAVG_A2, meanonly
+{txt}
+{com}. scalar SSE_AVG_A  = r(mean) * r(N)
+{txt}
+{com}. scalar RMSE_A     = cond(N_OOS_A>0, sqrt(SSE_A/N_OOS_A), .)
+{txt}
+{com}. scalar RMSE_AVG_A = cond(N_OOS_A>0, sqrt(SSE_AVG_A/N_OOS_A), .)
+{txt}
+{com}. scalar R2_OOS_A   = cond(SSE_AVG_A>0, 1 - SSE_A/SSE_AVG_A, .)
+{txt}
+{com}. 
+. post `OOS' ("F1 contemporaneous (Model A)") (`N_train_A') (N_OOS_A) ///
+>     (R2_OOS_A) (RMSE_A) (RMSE_AVG_A)
+{txt}
+{com}. 
+. ****************************************************
+. * Model B: F1.rp_rb_ex ~ L(0/3).zX_t + COVID  (train)
+. ****************************************************
+. reg y_A L(0/3).z_infl L(0/3).z_d_unrate L(0/3).z_d_fed ///
+>        L(0/3).z_d_sent L(0/3).z_d_logepu `COVIDVAR' if m <= `m_split'
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        60
+{txt}{hline 13}{c +}{hline 34}   F(21, 38)       = {res}     1.89
+{txt}       Model {c |} {res} .080970069        21  .003855718   {txt}Prob > F        ={res}    0.0431
+{txt}    Residual {c |} {res} .077528835        38  .002040232   {txt}R-squared       ={res}    0.5109
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.2405
+{txt}       Total {c |} {res} .158498904        59  .002686422   {txt}Root MSE        =   {res} .04517
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}         y_A{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 6}z_infl {c |}
+{space 9}--. {c |}{col 14}{res}{space 2} 1.96e-09{col 26}{space 2} 4.50e-08{col 37}{space 1}    0.04{col 46}{space 3}0.965{col 54}{space 4}-8.92e-08{col 67}{space 3} 9.31e-08
+{txt}{space 9}L1. {c |}{col 14}{res}{space 2} 2.05e-08{col 26}{space 2} 4.82e-08{col 37}{space 1}    0.43{col 46}{space 3}0.673{col 54}{space 4}-7.71e-08{col 67}{space 3} 1.18e-07
+{txt}{space 9}L2. {c |}{col 14}{res}{space 2}-1.02e-07{col 26}{space 2} 4.82e-08{col 37}{space 1}   -2.13{col 46}{space 3}0.040{col 54}{space 4}-2.00e-07{col 67}{space 3}-4.87e-09
+{txt}{space 9}L3. {c |}{col 14}{res}{space 2} 1.66e-07{col 26}{space 2} 4.94e-08{col 37}{space 1}    3.36{col 46}{space 3}0.002{col 54}{space 4} 6.58e-08{col 67}{space 3} 2.66e-07
+{txt}{space 12} {c |}
+{space 2}z_d_unrate {c |}
+{space 9}--. {c |}{col 14}{res}{space 2}-2.63e-10{col 26}{space 2} 1.53e-10{col 37}{space 1}   -1.72{col 46}{space 3}0.094{col 54}{space 4}-5.73e-10{col 67}{space 3} 4.67e-11
+{txt}{space 9}L1. {c |}{col 14}{res}{space 2}-5.40e-10{col 26}{space 2} 6.63e-10{col 37}{space 1}   -0.81{col 46}{space 3}0.420{col 54}{space 4}-1.88e-09{col 67}{space 3} 8.02e-10
+{txt}{space 9}L2. {c |}{col 14}{res}{space 2} 6.63e-10{col 26}{space 2} 6.91e-10{col 37}{space 1}    0.96{col 46}{space 3}0.343{col 54}{space 4}-7.35e-10{col 67}{space 3} 2.06e-09
+{txt}{space 9}L3. {c |}{col 14}{res}{space 2}-9.14e-10{col 26}{space 2} 6.12e-10{col 37}{space 1}   -1.49{col 46}{space 3}0.143{col 54}{space 4}-2.15e-09{col 67}{space 3} 3.24e-10
+{txt}{space 12} {c |}
+{space 5}z_d_fed {c |}
+{space 9}--. {c |}{col 14}{res}{space 2}-2.25e-10{col 26}{space 2} 9.82e-10{col 37}{space 1}   -0.23{col 46}{space 3}0.820{col 54}{space 4}-2.21e-09{col 67}{space 3} 1.76e-09
+{txt}{space 9}L1. {c |}{col 14}{res}{space 2}-2.35e-09{col 26}{space 2} 8.98e-10{col 37}{space 1}   -2.62{col 46}{space 3}0.013{col 54}{space 4}-4.17e-09{col 67}{space 3}-5.33e-10
+{txt}{space 9}L2. {c |}{col 14}{res}{space 2} 9.67e-10{col 26}{space 2} 8.89e-10{col 37}{space 1}    1.09{col 46}{space 3}0.284{col 54}{space 4}-8.33e-10{col 67}{space 3} 2.77e-09
+{txt}{space 9}L3. {c |}{col 14}{res}{space 2} 1.69e-09{col 26}{space 2} 9.53e-10{col 37}{space 1}    1.77{col 46}{space 3}0.085{col 54}{space 4}-2.42e-10{col 67}{space 3} 3.61e-09
+{txt}{space 12} {c |}
+{space 4}z_d_sent {c |}
+{space 9}--. {c |}{col 14}{res}{space 2} 2.75e-10{col 26}{space 2} 2.48e-09{col 37}{space 1}    0.11{col 46}{space 3}0.912{col 54}{space 4}-4.74e-09{col 67}{space 3} 5.29e-09
+{txt}{space 9}L1. {c |}{col 14}{res}{space 2}-4.33e-10{col 26}{space 2} 2.57e-09{col 37}{space 1}   -0.17{col 46}{space 3}0.867{col 54}{space 4}-5.63e-09{col 67}{space 3} 4.77e-09
+{txt}{space 9}L2. {c |}{col 14}{res}{space 2} 1.63e-10{col 26}{space 2} 2.77e-09{col 37}{space 1}    0.06{col 46}{space 3}0.953{col 54}{space 4}-5.44e-09{col 67}{space 3} 5.77e-09
+{txt}{space 9}L3. {c |}{col 14}{res}{space 2} 4.01e-10{col 26}{space 2} 2.34e-09{col 37}{space 1}    0.17{col 46}{space 3}0.865{col 54}{space 4}-4.34e-09{col 67}{space 3} 5.14e-09
+{txt}{space 12} {c |}
+{space 2}z_d_logepu {c |}
+{space 9}--. {c |}{col 14}{res}{space 2} 1.01e-10{col 26}{space 2} 1.01e-10{col 37}{space 1}    0.99{col 46}{space 3}0.327{col 54}{space 4}-1.05e-10{col 67}{space 3} 3.06e-10
+{txt}{space 9}L1. {c |}{col 14}{res}{space 2} 2.12e-11{col 26}{space 2} 1.11e-10{col 37}{space 1}    0.19{col 46}{space 3}0.850{col 54}{space 4}-2.04e-10{col 67}{space 3} 2.46e-10
+{txt}{space 9}L2. {c |}{col 14}{res}{space 2}-6.53e-11{col 26}{space 2} 1.09e-10{col 37}{space 1}   -0.60{col 46}{space 3}0.554{col 54}{space 4}-2.87e-10{col 67}{space 3} 1.56e-10
+{txt}{space 9}L3. {c |}{col 14}{res}{space 2}-6.39e-11{col 26}{space 2} 9.80e-11{col 37}{space 1}   -0.65{col 46}{space 3}0.518{col 54}{space 4}-2.62e-10{col 67}{space 3} 1.34e-10
+{txt}{space 12} {c |}
+{space 3}covid_era {c |}{col 14}{res}{space 2} .1323925{col 26}{space 2} .1147409{col 37}{space 1}    1.15{col 46}{space 3}0.256{col 54}{space 4}-.0998883{col 67}{space 3} .3646733
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2}-.0050891{col 26}{space 2} .0238926{col 37}{space 1}   -0.21{col 46}{space 3}0.832{col 54}{space 4}-.0534572{col 67}{space 3} .0432789
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}
+{com}. local N_train_B = e(N)
+{txt}
+{com}. 
+. * Save tidy coefs
+. matrix bB = e(b)
+{txt}
+{com}. matrix VB = e(V)
+{txt}
+{com}. local colsB : colfullnames bB
+{txt}
+{com}. scalar dfB = e(df_r)
+{txt}
+{com}. foreach nm of local colsB {c -(}
+{txt}  2{com}.     scalar b2 = bB[1,"`nm'"]
+{txt}  3{com}.     scalar s2 = sqrt(VB["`nm'","`nm'"])
+{txt}  4{com}.     scalar t2 = .
+{txt}  5{com}.     if (s2>0) scalar t2 = b2/s2
+{txt}  6{com}.     scalar p2 = .
+{txt}  7{com}.     if (s2>0) scalar p2 = 2*ttail(dfB, abs(t2))
+{txt}  8{com}.     post `COEF' ("Model B (lags 0–3)") ("`nm'") (b2) (s2) (t2) (p2)
+{txt}  9{com}. {c )-}
+{txt}
+{com}. 
+. * OOS metrics for Model B (its own mask & aligned baseline)
+. predict double yhat_B
+{txt}(option {bf:xb} assumed; fitted values)
+(3 missing values generated)
+
+{com}. egen _missB = rowmiss(y_A yhat_B)
+{txt}
+{com}. gen  byte maskB = (m > `m_split') & (_missB==0)
+{txt}
+{com}. drop _missB
+{txt}
+{com}. 
+. gen double eB   = y_A - yhat_B      if maskB
+{txt}(64 missing values generated)
+
+{com}. gen double eB2  = eB^2              if maskB
+{txt}(64 missing values generated)
+
+{com}. 
+. quietly su eB2, meanonly
+{txt}
+{com}. scalar SSE_B    = r(mean) * r(N)
+{txt}
+{com}. scalar N_OOS_B  = r(N)
+{txt}
+{com}. 
+. gen double eAVG_B2 = (y_A - ybar_train)^2 if maskB
+{txt}(64 missing values generated)
+
+{com}. quietly su eAVG_B2, meanonly
+{txt}
+{com}. scalar SSE_AVG_B  = r(mean) * r(N)
+{txt}
+{com}. scalar RMSE_B     = cond(N_OOS_B>0, sqrt(SSE_B/N_OOS_B), .)
+{txt}
+{com}. scalar RMSE_AVG_B = cond(N_OOS_B>0, sqrt(SSE_AVG_B/N_OOS_B), .)
+{txt}
+{com}. scalar R2_OOS_B   = cond(SSE_AVG_B>0, 1 - SSE_B/SSE_AVG_B, .)
+{txt}
+{com}. 
+. post `OOS' ("F1 with lags 0–3 (Model B)") (`N_train_B') (N_OOS_B) ///
+>     (R2_OOS_B) (RMSE_B) (RMSE_AVG_B)
+{txt}
+{com}. 
+. * ---------- Export OOS time-series BEFORE switching datasets ----------
+. preserve
+{txt}
+{com}.     keep m y_A yhat_A yhat_B maskA maskB
+{txt}
+{com}.     order m y_A yhat_A yhat_B maskA maskB
+{txt}
+{com}.     format m %tm
+{txt}
+{com}.     export delimited using "`root'/output/tables/macro_predict_oos_timeseries.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/macro_predict_oos_timeseries.csv} saved
+
+{com}. restore
+{txt}
+{com}. 
+. * ---------- Close & export tables ----------
+. postclose `COEF'
+{txt}
+{com}. postclose `OOS'
+{txt}
+{com}. 
+. use "`root'/output/tables/macro_predict_oos.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/macro_predict_oos.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/macro_predict_oos.csv} saved
+
+{com}. 
+. use "`root'/output/tables/macro_predict_in_sample_coefs.dta", clear
+{txt}
+{com}. export delimited using "`root'/output/tables/macro_predict_in_sample_coefs.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/macro_predict_in_sample_coefs.csv} saved
+
+{com}. 
+. di as result "05b complete — OOS metrics, in-sample coefs, and OOS timeseries written."
+{res}05b complete — OOS metrics, in-sample coefs, and OOS timeseries written.
+{txt}
+{com}. ****************************************************
+. * End
+. ****************************************************
+. 
+{txt}end of do-file
+
+{com}. capture noisily do "`root'/06b_eventstudy_variants_monthly_mac.do"
+{txt}
+{com}. ****************************************************
+. * 06b_eventstudy_variants_monthly_mac.do  (Stata 18)
+. * Monthly market-model CARs with multiple windows:
+. *   W1: (-1, +1)  Feb–Apr 2020
+. *   W2: (0, +2)   Mar–May 2020
+. *   W3: (-2, +2)  Jan–May 2020
+. * Estimation window: 2019m1–2020m1 (pre-COVID)
+. * Outputs: event_cars_monthly_variants.dta/.csv
+. ****************************************************
+. version 18
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. 
+. * -------- Paths --------
+. local root "/Users/johnmohmedi/Desktop/MGT3009"
+{txt}
+{com}. 
+. cap mkdir "`root'/output"
+{txt}
+{com}. cap mkdir "`root'/output/tables"
+{txt}
+{com}. cap mkdir "`root'/output/figures"
+{txt}
+{com}. 
+. * -------- Windows --------
+. local EST_START = tm(2019m1)
+{txt}
+{com}. local EST_END   = tm(2020m1)
+{txt}
+{com}. local MID       = tm(2020m3)   // not used for tables, useful for plots
+{txt}
+{com}. 
+. * Event windows (inclusive)
+. local W1_START  = tm(2020m2)   // (-1,+1) around Mar-2020 => Feb–Apr
+{txt}
+{com}. local W1_END    = tm(2020m4)
+{txt}
+{com}. 
+. local W2_START  = tm(2020m3)   // (0,+2) => Mar–May
+{txt}
+{com}. local W2_END    = tm(2020m5)
+{txt}
+{com}. 
+. local W3_START  = tm(2020m1)   // (-2,+2) => Jan–May
+{txt}
+{com}. local W3_END    = tm(2020m5)
+{txt}
+{com}. 
+. * -------- Result table --------
+. tempname P
+{txt}
+{com}. postfile `P' str6 ticker str8 window double CAR SE_CAR T P using ///
+>     "`root'/output/tables/event_cars_monthly_variants.dta", replace
+{txt}
+{com}. 
+. * We will loop across tickers and event windows inline (no program define)
+. local windows "W1 W2 W3"
+{txt}
+{com}. 
+. foreach s in goog msft ma hd {c -(}
+{txt}  2{com}. 
+.     preserve
+{txt}  3{com}.         use "`root'/output/data/monthly_returns.dta", clear
+{txt}  4{com}.         tsset m, monthly
+{txt}  5{com}. 
+.         * 1) Estimate market model on PRE-event window
+.         regress r_`s'_m r_mkt_m if inrange(m, `EST_START', `EST_END')
+{txt}  6{com}.         scalar rmse = e(rmse)
+{txt}  7{com}.         scalar df   = e(df_r)
+{txt}  8{com}. 
+.         * 2) For each window, compute CAR, SE, T, P
+.         foreach w of local windows {c -(}
+{txt}  9{com}.             local A = ``w'_START'
+{txt} 10{com}.             local B = ``w'_END'
+{txt} 11{com}. 
+.             tempvar u evt cp cartot
+{txt} 12{com}.             predict double `u' if inrange(m, `A', `B'), resid
+{txt} 13{com}.             gen byte `evt' = inrange(m, `A', `B')
+{txt} 14{com}. 
+.             bysort `evt' (m): gen double `cp' = cond(`evt', sum(`u'), .)
+{txt} 15{com}.             egen double `cartot' = total(`u') if `evt'
+{txt} 16{com}. 
+.             quietly summarize `cartot', meanonly
+{txt} 17{com}.             scalar CAR = r(max)
+{txt} 18{com}. 
+.             quietly count if `evt'
+{txt} 19{com}.             scalar K = r(N)
+{txt} 20{com}. 
+.             scalar SE  = rmse*sqrt(K)
+{txt} 21{com}.             scalar Tst = .
+{txt} 22{com}.             if SE>0 scalar Tst = CAR/SE
+{txt} 23{com}.             scalar Pv  = .
+{txt} 24{com}.             if SE>0 scalar Pv  = 2*ttail(df, abs(Tst))
+{txt} 25{com}. 
+.             local wlab = cond("`w'"=="W1","(-1,+1)", ///
+>                          cond("`w'"=="W2","(0,+2)","(-2,+2)"))
+{txt} 26{com}. 
+.             post `P' ("`s'") ("`wlab'") (CAR) (SE) (Tst) (Pv)
+{txt} 27{com}. 
+.             drop `u' `evt' `cp' `cartot'
+{txt} 28{com}.         {c )-}
+{txt} 29{com}.     restore
+{txt} 30{com}. {c )-}
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     2.84
+{txt}       Model {c |} {res} .006070653         1  .006070653   {txt}Prob > F        ={res}    0.1198
+{txt}    Residual {c |} {res} .023478805        11  .002134437   {txt}R-squared       ={res}    0.2054
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.1332
+{txt}       Total {c |} {res} .029549458        12  .002462455   {txt}Root MSE        =   {res}  .0462
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}    r_goog_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .6257095{col 26}{space 2} .3710195{col 37}{space 1}    1.69{col 46}{space 3}0.120{col 54}{space 4}-.1908989{col 67}{space 3} 1.442318
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0111235{col 26}{space 2} .0150015{col 37}{space 1}    0.74{col 46}{space 3}0.474{col 54}{space 4}-.0218945{col 67}{space 3} .0441416
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     8.16
+{txt}       Model {c |} {res} .008093681         1  .008093681   {txt}Prob > F        ={res}    0.0156
+{txt}    Residual {c |} {res} .010915287        11  .000992299   {txt}R-squared       ={res}    0.4258
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.3736
+{txt}       Total {c |} {res} .019008968        12  .001584081   {txt}Root MSE        =   {res}  .0315
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}    r_msft_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .7224837{col 26}{space 2} .2529742{col 37}{space 1}    2.86{col 46}{space 3}0.016{col 54}{space 4} .1656912{col 67}{space 3} 1.279276
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0256674{col 26}{space 2} .0102286{col 37}{space 1}    2.51{col 46}{space 3}0.029{col 54}{space 4} .0031545{col 67}{space 3} .0481803
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     6.93
+{txt}       Model {c |} {res} .006694866         1  .006694866   {txt}Prob > F        ={res}    0.0233
+{txt}    Residual {c |} {res} .010622448        11  .000965677   {txt}R-squared       ={res}    0.3866
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.3308
+{txt}       Total {c |} {res} .017317314        12   .00144311   {txt}Root MSE        =   {res} .03108
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}      r_ma_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2} .6570917{col 26}{space 2} .2495577{col 37}{space 1}    2.63{col 46}{space 3}0.023{col 54}{space 4} .1078189{col 67}{space 3} 1.206365
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0263787{col 26}{space 2} .0100904{col 37}{space 1}    2.61{col 46}{space 3}0.024{col 54}{space 4} .0041699{col 67}{space 3} .0485876
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+{res}
+{p 0 15 2}{txt:Time variable: }{res:m}{txt:, }{res:{bind:2015m1}}{txt: to }{res:{bind:2025m9}}{p_end}
+{txt}{col 9}Delta: {res}1 month
+
+{txt}      Source {c |}       SS           df       MS      Number of obs   ={res}        13
+{txt}{hline 13}{c +}{hline 34}   F(1, 11)        = {res}     4.24
+{txt}       Model {c |} {res} .007884536         1  .007884536   {txt}Prob > F        ={res}    0.0640
+{txt}    Residual {c |} {res} .020467188        11  .001860653   {txt}R-squared       ={res}    0.2781
+{txt}{hline 13}{c +}{hline 34}   Adj R-squared   ={res}    0.2125
+{txt}       Total {c |} {res} .028351724        12  .002362644   {txt}Root MSE        =   {res} .04314
+
+{txt}{hline 13}{c TT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{col 1}      r_hd_m{col 14}{c |} Coefficient{col 26}  Std. err.{col 38}      t{col 46}   P>|t|{col 54}     [95% con{col 67}f. interval]
+{hline 13}{c +}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{space 5}r_mkt_m {c |}{col 14}{res}{space 2}  .713088{col 26}{space 2} .3464079{col 37}{space 1}    2.06{col 46}{space 3}0.064{col 54}{space 4}-.0493507{col 67}{space 3} 1.475527
+{txt}{space 7}_cons {c |}{col 14}{res}{space 2} .0088592{col 26}{space 2} .0140064{col 37}{space 1}    0.63{col 46}{space 3}0.540{col 54}{space 4}-.0219686{col 67}{space 3} .0396871
+{txt}{hline 13}{c BT}{hline 11}{hline 11}{hline 9}{hline 8}{hline 13}{hline 12}
+{res}{txt}(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(126 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+(124 missing values generated)
+
+{com}. 
+. postclose `P'
+{txt}
+{com}. 
+. * -------- Export CSV --------
+. use "`root'/output/tables/event_cars_monthly_variants.dta", clear
+{txt}
+{com}. order ticker window CAR SE_CAR T P
+{txt}
+{com}. format CAR SE_CAR %9.4f
+{txt}
+{com}. export delimited using "`root'/output/tables/event_cars_monthly_variants.csv", replace
+{res}{txt}file {bf:/Users/johnmohmedi/Desktop/MGT3009/output/tables/event_cars_monthly_variants.csv} saved
+
+{com}. 
+. di as result "Saved -> `root'/output/tables/event_cars_monthly_variants.csv"
+{res}Saved -> /Users/johnmohmedi/Desktop/MGT3009/output/tables/event_cars_monthly_variants.csv
+{txt}
+{com}. 
+{txt}end of do-file
+
+{com}. 
+. log close
+      {txt}name:  {res}<unnamed>
+       {txt}log:  {res}/Users/johnmohmedi/Desktop/MGT3009/output/run_log.smcl
+  {txt}log type:  {res}smcl
+ {txt}closed on:  {res} 9 Nov 2025, 19:16:20
+{txt}{.-}
+{smcl}
+{txt}{sf}{ul off}

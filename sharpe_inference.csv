@@ -1,0 +1,5 @@
+stat,value
+Sharpe_ann (log-excess),1.05014894503966
+Lo HAC t-stat (mu=0),3.966431142797438
+Lo HAC p-value,.0001216433920261
+N (months),127
